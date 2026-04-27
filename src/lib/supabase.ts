@@ -2,11 +2,29 @@ import { createClient, type SupabaseClient } from '@supabase/supabase-js';
 
 const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
 const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+const sharedCookieDomain = process.env.NEXT_PUBLIC_SHARED_COOKIE_DOMAIN?.trim() || '';
+const loginOrigin = process.env.NEXT_PUBLIC_LOGIN_ORIGIN?.trim() || 'https://geeksproductionstudio.com';
 
 export const isSupabaseConfigured = Boolean(url && anonKey);
 
+type ProfileWithAuthority = {
+  tester_programs?: string[] | null;
+  developer_status?: string | null;
+};
+
+export type ProfileAuthority = {
+  isDeveloper: boolean;
+  isReleasePublisher: boolean;
+  isTaggedDeltaDashTester: boolean;
+  isPurchaseExempt: boolean;
+};
+
 let browserClient: SupabaseClient | null = null;
 let serverClient: SupabaseClient | null = null;
+
+function getSharedCookieDomainAttribute() {
+  return sharedCookieDomain ? `; domain=${sharedCookieDomain}` : '';
+}
 
 const cookieStorage = {
   getItem: (key: string) => {
@@ -26,13 +44,36 @@ const cookieStorage = {
   },
   setItem: (key: string, value: string) => {
     if (typeof document === 'undefined') return;
-    document.cookie = `${key}=${encodeURIComponent(value)}; domain=.geeksproductionstudio.com; path=/; SameSite=Lax; Secure; max-age=${60 * 60 * 24 * 365}`;
+    document.cookie = `${key}=${encodeURIComponent(value)}${getSharedCookieDomainAttribute()}; path=/; SameSite=Lax; Secure; max-age=${60 * 60 * 24 * 365}`;
   },
   removeItem: (key: string) => {
     if (typeof document === 'undefined') return;
-    document.cookie = `${key}=; domain=.geeksproductionstudio.com; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT; SameSite=Lax; Secure`;
+    document.cookie = `${key}=${getSharedCookieDomainAttribute()}; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT; SameSite=Lax; Secure`;
   },
 };
+
+function normalizeProgramList(programs: string[] | null | undefined) {
+  return (programs ?? []).map((program) => program.trim().toLowerCase()).filter(Boolean);
+}
+
+export function resolveProfileAuthority(profile: ProfileWithAuthority | null | undefined): ProfileAuthority {
+  const normalizedPrograms = normalizeProgramList(profile?.tester_programs);
+  const isDeveloper = profile?.developer_status?.trim().toUpperCase() === 'APPROVED';
+  const isTaggedDeltaDashTester = normalizedPrograms.includes('deltadash');
+  const isReleasePublisher = isDeveloper;
+  const isPurchaseExempt = isDeveloper || isTaggedDeltaDashTester;
+
+  return {
+    isDeveloper,
+    isReleasePublisher,
+    isTaggedDeltaDashTester,
+    isPurchaseExempt,
+  };
+}
+
+export function isReleaseAdminProfile(profile: ProfileWithAuthority | null | undefined) {
+  return resolveProfileAuthority(profile).isReleasePublisher;
+}
 
 export function getSupabaseClient() {
   if (!isSupabaseConfigured) {
@@ -60,19 +101,16 @@ export function getSupabaseClient() {
   return browserClient;
 }
 
-export function isReleaseAdminProfile(profile: { tester_programs?: string[] | null } | null | undefined) {
-  if (!profile?.tester_programs?.length) return false;
-
-  return profile.tester_programs.some((program) => {
-    const normalized = program.trim().toLowerCase();
-    return normalized === 'deltadash' || normalized === 'developer';
-  });
-}
-
 export async function getSharedSessionProfile() {
   const supabase = getSupabaseClient();
   if (!supabase) {
-    return { session: null, user: null, profile: null, isReleaseAdmin: false };
+    return {
+      session: null,
+      user: null,
+      profile: null,
+      authority: resolveProfileAuthority(null),
+      isReleaseAdmin: false,
+    };
   }
 
   const {
@@ -82,7 +120,13 @@ export async function getSharedSessionProfile() {
   const user = session?.user ?? null;
 
   if (!user) {
-    return { session: null, user: null, profile: null, isReleaseAdmin: false };
+    return {
+      session: null,
+      user: null,
+      profile: null,
+      authority: resolveProfileAuthority(null),
+      isReleaseAdmin: false,
+    };
   }
 
   const { data: profile } = await supabase
@@ -91,7 +135,9 @@ export async function getSharedSessionProfile() {
     .eq('id', user.id)
     .maybeSingle();
 
-  return { session, user, profile, isReleaseAdmin: isReleaseAdminProfile(profile) };
+  const authority = resolveProfileAuthority(profile);
+
+  return { session, user, profile, authority, isReleaseAdmin: authority.isReleasePublisher };
 }
 
 export async function uploadOfficialReleaseFile(file: File, versionId: string, fileType: string) {
@@ -117,5 +163,5 @@ export async function uploadOfficialReleaseFile(file: File, versionId: string, f
 
 export function getOfficialLoginUrl(nextPath = '/') {
   const target = encodeURIComponent(nextPath);
-  return `https://geeksproductionstudio.com/login?redirect_to=${target}`;
+  return `${loginOrigin}/login?redirect_to=${target}`;
 }

@@ -2,7 +2,7 @@ import type { Metadata } from 'next';
 import { Orbitron, Rajdhani, Geist_Mono } from 'next/font/google';
 import './globals.css';
 import { AppShell } from '@/components/app-shell';
-import { getPreferredLanguage } from '@/lib/i18n-server';
+import { LanguageProvider } from '@/components/language-provider';
 
 const headingFont = Orbitron({
   subsets: ['latin'],
@@ -25,17 +25,17 @@ export const metadata: Metadata = {
   description: 'Delta Dash 官方发布、下载、创意工坊模组、分支规则、社区讨论与规则浏览平台。',
 };
 
-export default async function RootLayout({
+export default function RootLayout({
   children,
 }: Readonly<{
   children: React.ReactNode;
 }>) {
-  const language = await getPreferredLanguage();
-
   return (
-    <html lang={language} className={`${headingFont.variable} ${bodyFont.variable} ${monoFont.variable} h-full antialiased`}>
+    <html lang="zh" className={`${headingFont.variable} ${bodyFont.variable} ${monoFont.variable} h-full antialiased`}>
       <body className="min-h-full">
-        <AppShell language={language}>{children}</AppShell>
+        <LanguageProvider>
+          <AppShell>{children}</AppShell>
+        </LanguageProvider>
       </body>
     </html>
   );

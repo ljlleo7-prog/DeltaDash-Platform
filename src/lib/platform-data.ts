@@ -9,6 +9,7 @@ type VersionRow = {
   status: Version['status'];
   summary: unknown;
   changelog: unknown[] | null;
+  first_purchase_token_price: number | null;
   dd_version_files?: Array<{
     id: string;
     label: unknown;
@@ -19,6 +20,34 @@ type VersionRow = {
   dd_branch_map_parent?: Array<{
     parent_version_id: string | null;
   }>;
+  dd_version_transition_prices?: Array<{
+    id: string;
+    from_version_id: string;
+    to_version_id: string;
+    transition_type: 'upgrade' | 'fallback';
+    token_price: number;
+    from_version?: Array<{
+      name: string;
+    }> | null;
+  }>;
+};
+
+type ThreadRow = {
+  id: string;
+  title: unknown;
+  content: unknown;
+  linked_version_id: string | null;
+  linked_mod_id: string | null;
+  author_id: string | null;
+  author_name: string;
+  created_at: string;
+  profiles:
+    | {
+        id?: string;
+        display_name?: string | null;
+        developer_status?: string | null;
+      }
+    | null;
 };
 
 export async function getVersions(): Promise<Version[]> {
@@ -34,8 +63,17 @@ export async function getVersions(): Promise<Version[]> {
       status,
       summary,
       changelog,
+      first_purchase_token_price,
       dd_version_files(id, label, file_type, file_url, size_label),
-      dd_branch_map_parent:dd_branch_map!child_version_id(parent_version_id)
+      dd_branch_map_parent:dd_branch_map!child_version_id(parent_version_id),
+      dd_version_transition_prices!to_version_id(
+        id,
+        from_version_id,
+        to_version_id,
+        transition_type,
+        token_price,
+        from_version:dd_version_list!from_version_id(name)
+      )
     `)
     .order('name');
 
@@ -49,6 +87,15 @@ export async function getVersions(): Promise<Version[]> {
     parentVersionId: item.dd_branch_map_parent?.[0]?.parent_version_id ?? null,
     summary: toLocalizedText(item.summary),
     changelog: toLocalizedList(item.changelog),
+    firstPurchaseTokenPrice: item.first_purchase_token_price ?? 0,
+    transitionPrices: (item.dd_version_transition_prices ?? []).map((transition) => ({
+      id: String(transition.id),
+      fromVersionId: transition.from_version_id,
+      fromVersionName: transition.from_version?.[0]?.name ?? transition.from_version_id,
+      toVersionId: transition.to_version_id,
+      transitionType: transition.transition_type,
+      tokenPrice: transition.token_price,
+    })),
     files: (item.dd_version_files ?? []).map((file) => ({
       id: String(file.id),
       label: toLocalizedText(file.label),
@@ -115,18 +162,22 @@ export async function getThreads(): Promise<Thread[]> {
 
   const { data, error } = await supabase
     .from('dd_threads')
-    .select('id, title, content, linked_version_id, linked_mod_id, author_name, created_at')
+    .select('id, title, content, linked_version_id, linked_mod_id, author_id, author_name, created_at, profiles:author_id(id, display_name, developer_status)')
     .order('created_at', { ascending: false });
 
   if (error || !data?.length) return [];
 
-  return data.map((item) => ({
+  return (data as ThreadRow[]).map((item) => ({
     id: String(item.id),
     title: toLocalizedText(item.title),
     content: toLocalizedText(item.content),
     linkedVersionId: item.linked_version_id ?? undefined,
     linkedModId: item.linked_mod_id ?? undefined,
-    author: item.author_name,
+    author: {
+      id: item.author_id ?? item.profiles?.id,
+      name: item.profiles?.display_name?.trim() || item.author_name,
+      isDeveloper: item.profiles?.developer_status?.trim().toUpperCase() === 'APPROVED',
+    },
     createdAt: item.created_at,
   }));
 }

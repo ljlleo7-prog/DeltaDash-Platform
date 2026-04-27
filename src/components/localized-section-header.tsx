@@ -1,5 +1,7 @@
+'use client';
+
+import { useLanguage } from '@/components/language-provider';
 import { SectionHeader } from '@/components/section-header';
-import { getPreferredLanguage } from '@/lib/i18n-server';
 import type { Language } from '@/lib/i18n';
 
 type SectionHeaderCopy = {
@@ -9,12 +11,12 @@ type SectionHeaderCopy = {
   action?: { href: string; label: string };
 };
 
-export async function LocalizedSectionHeader({
+export function LocalizedSectionHeader({
   copy,
 }: {
   copy: Record<Language, SectionHeaderCopy>;
 }) {
-  const language = await getPreferredLanguage();
+  const { language } = useLanguage();
   const active = copy[language];
 
   return (

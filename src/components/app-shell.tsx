@@ -1,7 +1,10 @@
+'use client';
+
 import Link from 'next/link';
 import type { ReactNode } from 'react';
 import { AuthStatusPanel } from '@/components/auth-status-panel';
 import { LanguageToggle } from '@/components/language-toggle';
+import { useLanguage } from '@/components/language-provider';
 import type { Language } from '@/lib/i18n';
 
 const navItems: Array<{ href: string; label: Record<Language, string> }> = [
@@ -14,7 +17,8 @@ const navItems: Array<{ href: string; label: Record<Language, string> }> = [
   { href: '/rules', label: { zh: '规则', en: 'Rules' } },
 ];
 
-export function AppShell({ children, language }: { children: ReactNode; language: Language }) {
+export function AppShell({ children }: { children: ReactNode }) {
+  const { language } = useLanguage();
   const copy = {
     kicker: 'deltadash.geeksproductionstudio.com',
     title: language === 'en' ? 'Delta Dash Platform' : 'Delta Dash 平台',
@@ -34,7 +38,7 @@ export function AppShell({ children, language }: { children: ReactNode; language
           <p className="dd-site-subtitle">{copy.subtitle}</p>
         </div>
         <div className="dd-auth-wrap space-y-4">
-          <LanguageToggle initialLanguage={language} />
+          <LanguageToggle />
           <AuthStatusPanel language={language} />
         </div>
       </header>

@@ -40,6 +40,7 @@ Use English unless otherwise specified.
 - Supabase client setup lives in `src/lib/supabase.ts`. Browser auth uses a custom cookie-backed storage adapter on `.geeksproductionstudio.com` so this app can share sessions with the main Delta Dash / Geeks Production Studio site.
 - `getSharedSessionProfile()` reads the existing Supabase session and the authoritative `profiles` row; `isReleaseAdminProfile()` treats `tester_programs` entries `DeltaDash` and `Developer` as release-admin access.
 - Official release uploads go through Supabase Storage bucket `dd-official-releases` via `uploadOfficialReleaseFile()`, then the resulting public URLs are written to `dd_version_files`.
+- External reference project for profile authority, developer verification, test-player tags, and community/news formatting patterns: `/Users/leolong/documents/trae_projects/GPS-Homepage`
 
 ### UI conventions
 
@@ -49,3 +50,5 @@ Use English unless otherwise specified.
 ## Repository instructions
 
 - Read the relevant guide in `node_modules/next/dist/docs/` before changing framework behavior; this project uses a Next.js version with breaking changes relative to older conventions.
+- When database schema changes are needed, always create a new manually runnable SQL file under `db/migrations/` instead of relying only on `db/schema.sql` edits.
+- Migration files must be safe for the user's editor-run workflow: rerunnable where practical, and scoped to dd-related objects plus `public.dd_is_release_admin()` unless the user explicitly broadens scope.

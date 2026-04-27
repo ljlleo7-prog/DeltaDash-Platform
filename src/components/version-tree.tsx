@@ -1,4 +1,4 @@
-import type { Version } from '@/lib/types';
+import type { Version, VersionTransitionPrice } from '@/lib/types';
 import { localize, statusLabel, type Language } from '@/lib/i18n';
 
 const statusClasses: Record<Version['status'], string> = {
@@ -43,6 +43,18 @@ function VersionNode({
             </div>
             <p className="mt-2 text-sm text-[var(--text-main)]">{localize(version.title, language)}</p>
             <p className="dd-copy mt-3 text-sm">{localize(version.summary, language)}</p>
+            <p className="mt-3 text-sm font-semibold text-cyan-300">
+              {language === 'en' ? `First purchase: ${version.firstPurchaseTokenPrice} tokens` : `首购价格：${version.firstPurchaseTokenPrice} 代币`}
+            </p>
+            {version.transitionPrices.length ? (
+              <div className="mt-4 space-y-2 text-xs text-slate-300">
+                {version.transitionPrices.map((transition) => (
+                  <p key={transition.id} className="rounded-2xl border border-white/10 bg-white/5 px-3 py-2">
+                    {formatTransitionPrice(transition, language)}
+                  </p>
+                ))}
+              </div>
+            ) : null}
           </div>
           <div className="dd-subpanel min-w-28 text-xs text-[var(--text-dim)]">
             <p className="dd-label">{language === 'en' ? 'Files' : '文件'}</p>
@@ -60,4 +72,16 @@ function VersionNode({
       ) : null}
     </div>
   );
+}
+
+function formatTransitionPrice(transition: VersionTransitionPrice, language: Language) {
+  if (transition.transitionType === 'upgrade') {
+    return language === 'en'
+      ? `Upgrade from ${transition.fromVersionName}: ${transition.tokenPrice} tokens`
+      : `从 ${transition.fromVersionName} 升级：${transition.tokenPrice} 代币`;
+  }
+
+  return language === 'en'
+    ? `Fall back from ${transition.fromVersionName}: ${transition.tokenPrice} tokens`
+    : `从 ${transition.fromVersionName} 回退：${transition.tokenPrice} 代币`;
 }

@@ -3,6 +3,7 @@ import type { LocalizedText } from '@/lib/i18n';
 export type VersionStatus = 'stable' | 'beta' | 'experimental';
 
 export type ReleaseFileType = 'rules' | 'cards' | 'driver_pack' | 'bundle';
+export type VersionTransitionType = 'upgrade' | 'fallback';
 
 export interface VersionFile {
   id: string;
@@ -10,6 +11,15 @@ export interface VersionFile {
   fileType: ReleaseFileType;
   href: string;
   size: string;
+}
+
+export interface VersionTransitionPrice {
+  id: string;
+  fromVersionId: string;
+  fromVersionName: string;
+  toVersionId: string;
+  transitionType: VersionTransitionType;
+  tokenPrice: number;
 }
 
 export interface Version {
@@ -20,6 +30,8 @@ export interface Version {
   parentVersionId: string | null;
   changelog: LocalizedText[];
   summary: LocalizedText;
+  firstPurchaseTokenPrice: number;
+  transitionPrices: VersionTransitionPrice[];
   files: VersionFile[];
 }
 
@@ -43,13 +55,19 @@ export interface Fork {
   author: string;
 }
 
+export interface AuthorProfile {
+  id?: string;
+  name: string;
+  isDeveloper: boolean;
+}
+
 export interface Thread {
   id: string;
   title: LocalizedText;
   content: LocalizedText;
   linkedVersionId?: string;
   linkedModId?: string;
-  author: string;
+  author: AuthorProfile;
   createdAt: string;
 }
 

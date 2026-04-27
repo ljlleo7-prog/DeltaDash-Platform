@@ -1,6 +1,8 @@
+'use client';
+
 import Link from 'next/link';
+import { useLanguage } from '@/components/language-provider';
 import { LocalizedSectionHeader } from '@/components/localized-section-header';
-import { getPreferredLanguage } from '@/lib/i18n-server';
 import type { Language } from '@/lib/i18n';
 
 const playCards: Record<Language, Array<{ title: string; description: string; href: string; cta: string }>> = {
@@ -16,8 +18,8 @@ const playCards: Record<Language, Array<{ title: string; description: string; hr
   ],
 };
 
-export default async function PlayPage() {
-  const language = await getPreferredLanguage();
+export default function PlayPage() {
+  const { language } = useLanguage();
 
   return (
     <div className="space-y-8">

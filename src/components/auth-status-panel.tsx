@@ -7,8 +7,8 @@ import type { Language } from '@/lib/i18n';
 
 type AuthState = {
   user: { id: string; email?: string | null } | null;
-  profile: { display_name?: string | null; tester_programs?: string[] | null } | null;
-  isAdmin: boolean;
+  profile: { display_name?: string | null; tester_programs?: string[] | null; developer_status?: string | null } | null;
+  isApprovedDeveloper: boolean;
   loading: boolean;
 };
 
@@ -22,10 +22,13 @@ export function AuthStatusPanel({ language }: { language: Language }) {
   const [state, setState] = useState<AuthState>({
     user: null,
     profile: null,
-    isAdmin: false,
+    isApprovedDeveloper: false,
     loading: true,
   });
-  const [loginUrl, setLoginUrl] = useState(() => getOfficialLoginUrl('/'));
+
+  const loginUrl = typeof window === 'undefined'
+    ? getOfficialLoginUrl('/')
+    : getOfficialLoginUrl(`${window.location.pathname}${window.location.search}${window.location.hash}` || '/');
 
   useEffect(() => {
     const supabase = getSupabaseClient();
@@ -35,17 +38,12 @@ export function AuthStatusPanel({ language }: { language: Language }) {
       setState({
         user: user ? { id: user.id, email: user.email ?? null } : null,
         profile: profile as AuthState['profile'],
-        isAdmin: isReleaseAdminProfile(profile),
+        isApprovedDeveloper: isReleaseAdminProfile(profile),
         loading: false,
       });
     }
 
     void loadProfile();
-
-    if (typeof window !== 'undefined') {
-      const nextPath = `${window.location.pathname}${window.location.search}${window.location.hash}` || '/';
-      setLoginUrl(getOfficialLoginUrl(nextPath));
-    }
 
     if (!supabase) {
       return;
@@ -69,7 +67,7 @@ export function AuthStatusPanel({ language }: { language: Language }) {
         : '可浏览公开版本与创意工坊内容，或使用官网单点登录后继续操作。',
     signIn: language === 'en' ? 'Sign in' : '登录',
     ssoFallback: language === 'en' ? 'Signed in with shared SSO' : '已通过共享单点登录',
-    adminBadge: language === 'en' ? 'Release admin' : '发布管理员',
+    developerBadge: language === 'en' ? 'Approved developer' : '已批准开发者',
     publishRelease: language === 'en' ? 'Publish release' : '发布版本',
     signOut: language === 'en' ? 'Sign out' : '退出登录',
   };
@@ -78,7 +76,7 @@ export function AuthStatusPanel({ language }: { language: Language }) {
     const supabase = getSupabaseClient();
     if (!supabase) return;
     await supabase.auth.signOut();
-    setState({ user: null, profile: null, isAdmin: false, loading: false });
+    setState({ user: null, profile: null, isApprovedDeveloper: false, loading: false });
   }
 
   if (state.loading) {
@@ -104,10 +102,10 @@ export function AuthStatusPanel({ language }: { language: Language }) {
           <p className="font-semibold text-[var(--text-main)]">{getDisplayName(state, language)}</p>
           <p className="mt-1 text-xs text-[var(--text-muted)]">{state.user.email ?? copy.ssoFallback}</p>
         </div>
-        {state.isAdmin ? <span className="dd-badge">{copy.adminBadge}</span> : null}
+        {state.isApprovedDeveloper ? <span className="dd-badge">{copy.developerBadge}</span> : null}
       </div>
       <div className="mt-4 flex flex-wrap gap-2">
-        {state.isAdmin ? (
+        {state.isApprovedDeveloper ? (
           <Link href="/versions/publish" className="dd-inline-action">
             {copy.publishRelease}
           </Link>

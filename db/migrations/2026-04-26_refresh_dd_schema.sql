@@ -1,7 +1,7 @@
--- Delta Dash Platform MVP schema
--- Authoritative snapshot only.
--- For manual environment updates, create and run a new rerunnable file under db/migrations/.
--- Migration files must stay scoped to dd-owned objects plus public.dd_is_release_admin().
+-- Delta Dash rerunnable migration
+-- Manual editor-run file for refreshing dd-owned schema objects only.
+-- Safe scope: dd_* tables/policies plus public.dd_is_release_admin().
+-- Do not expand this file to modify shared objects like public.profiles or auth.users.
 
 create table if not exists dd_version_list (
   id uuid primary key default gen_random_uuid(),
@@ -10,10 +10,19 @@ create table if not exists dd_version_list (
   status text not null check (status in ('stable', 'beta', 'experimental')),
   summary jsonb not null default jsonb_build_object('zh', '', 'en', ''),
   changelog jsonb not null default '[]'::jsonb,
-  first_purchase_token_price integer not null default 0 check (first_purchase_token_price >= 0),
   created_at timestamp with time zone not null default timezone('utc', now()),
   updated_at timestamp with time zone not null default timezone('utc', now())
 );
+
+alter table dd_version_list
+  add column if not exists first_purchase_token_price integer not null default 0;
+
+alter table dd_version_list
+  drop constraint if exists dd_version_list_first_purchase_token_price_check;
+
+alter table dd_version_list
+  add constraint dd_version_list_first_purchase_token_price_check
+  check (first_purchase_token_price >= 0);
 
 create table if not exists dd_branch_map (
   id uuid primary key default gen_random_uuid(),
@@ -124,6 +133,24 @@ as $$
   );
 $$;
 
+drop policy if exists "public read dd_version_list" on dd_version_list;
+drop policy if exists "public read dd_branch_map" on dd_branch_map;
+drop policy if exists "public read dd_version_transition_prices" on dd_version_transition_prices;
+drop policy if exists "public read dd_version_files" on dd_version_files;
+drop policy if exists "public read dd_mods" on dd_mods;
+drop policy if exists "public read dd_forks" on dd_forks;
+drop policy if exists "public read dd_fork_files" on dd_fork_files;
+drop policy if exists "public read dd_threads" on dd_threads;
+drop policy if exists "public read dd_rule_sections" on dd_rule_sections;
+drop policy if exists "admin write dd_version_list" on dd_version_list;
+drop policy if exists "admin write dd_branch_map" on dd_branch_map;
+drop policy if exists "admin write dd_version_transition_prices" on dd_version_transition_prices;
+drop policy if exists "admin write dd_version_files" on dd_version_files;
+drop policy if exists "authenticated write dd_mods" on dd_mods;
+drop policy if exists "authenticated write dd_forks" on dd_forks;
+drop policy if exists "authenticated write dd_fork_files" on dd_fork_files;
+drop policy if exists "authenticated write dd_threads" on dd_threads;
+
 create policy "public read dd_version_list" on dd_version_list for select using (true);
 create policy "public read dd_branch_map" on dd_branch_map for select using (true);
 create policy "public read dd_version_transition_prices" on dd_version_transition_prices for select using (true);
@@ -145,9 +172,5 @@ create policy "authenticated write dd_fork_files" on dd_fork_files for insert to
 create policy "authenticated write dd_threads" on dd_threads for insert to authenticated with check (true);
 
 -- Existing public.profiles stays authoritative and is intentionally not created or modified here.
--- Existing string rows should be backfilled into jsonb objects like {"zh": "...", "en": "..."} before rollout.
--- Shared SSO should continue using the existing geeksproductionstudio.com Supabase project/session cookies.
--- Storage buckets to create:
---   dd-official-releases (public read, admin write via matching storage policies)
---   dd-mods (public or signed)
---   dd-forks (public or signed)
+-- Shared auth dependencies like auth.users are intentionally referenced, not modified.
+-- Storage buckets/policies remain managed separately from this dd-only migration.

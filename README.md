@@ -11,6 +11,7 @@ This repository contains the Next.js platform app for Delta Dash. It is the bili
 - TypeScript
 - Tailwind CSS v4
 - Supabase
+- GitHub Pages static export
 
 ## Platform overview
 
@@ -27,13 +28,14 @@ The visual style is intentionally aligned with the original Delta Dash site rath
 
 ## Architecture snapshot
 
-- Routes live under `src/app` and are mostly async server components.
+- Routes live under `src/app` and now render as static shells backed by client-side Supabase queries.
 - `src/app/layout.tsx` applies the shared shell, fonts, and top-level page chrome.
 - `src/components/app-shell.tsx` centralizes navigation, auth status, and language switching.
+- `src/components/language-provider.tsx` persists the active language on the client and updates the document `lang` attribute after hydration.
 - `src/lib/platform-data.ts` maps Supabase rows into UI-friendly shapes used by the routes.
-- `src/lib/i18n.ts` and `src/lib/i18n-server.ts` handle bilingual content and server-side language selection.
+- `src/lib/i18n.ts` handles bilingual content and client-side language selection.
 - `src/lib/supabase.ts` contains shared-session auth helpers, release-admin checks, and official file upload helpers.
-- `db/schema.sql` is the source of truth for the current MVP schema and storage expectations.
+- `db/schema.sql` is the source-of-truth snapshot for the current MVP schema and storage expectations.
 
 ## Main route areas
 
@@ -61,22 +63,22 @@ Start the development server:
 npm run dev
 ```
 
-Build for production:
+Build the static export:
 
 ```bash
 npm run build
-```
-
-Run the production server locally:
-
-```bash
-npm run start
 ```
 
 Lint the codebase:
 
 ```bash
 npm run lint
+```
+
+Run the local predeploy checks:
+
+```bash
+npm run deploy
 ```
 
 ## Environment variables
@@ -86,6 +88,9 @@ The app expects the following public Supabase environment variables:
 ```bash
 NEXT_PUBLIC_SUPABASE_URL=
 NEXT_PUBLIC_SUPABASE_ANON_KEY=
+NEXT_PUBLIC_APP_ORIGIN=https://deltadash.geeksproductionstudio.com
+NEXT_PUBLIC_SHARED_COOKIE_DOMAIN=.geeksproductionstudio.com
+NEXT_PUBLIC_LOGIN_ORIGIN=https://geeksproductionstudio.com
 ```
 
 If these are missing:
@@ -98,19 +103,20 @@ If these are missing:
 
 ### Shared SSO behavior
 
-Authentication is designed to share Supabase session cookies with the main Geeks Production Studio domain. The browser-side auth storage in `src/lib/supabase.ts` is configured for `.geeksproductionstudio.com`.
+Authentication is designed to share Supabase session cookies with the main Geeks Production Studio domain. The browser-side auth storage in `src/lib/supabase.ts` is configured through `NEXT_PUBLIC_SHARED_COOKIE_DOMAIN`, which should be set to `.geeksproductionstudio.com` in production.
 
 That means:
 
 - production auth assumes the Geeks Production Studio domain model
-- local development on plain `localhost` may not fully mirror cross-subdomain session behavior
-- GPS login redirects are expected to return users back into this app after sign-in
+- local development on plain `localhost` may not fully mirror cross-subdomain session behavior unless you deliberately set the shared cookie domain
+- GPS login redirects are expected to return users back into this app after sign-in via `NEXT_PUBLIC_LOGIN_ORIGIN`
+- GitHub Pages hosting must use the custom domain `deltadash.geeksproductionstudio.com` so the shared cookie scope remains valid
 
-Release publishing access is restricted to profiles whose `tester_programs` include `DeltaDash` or `Developer`.
+Release publishing access is restricted to approved developer profiles.
 
 ### Language model
 
-The current language is stored in the `deltaDashLanguage` cookie and supports:
+The current language is stored client-side and mirrored into the `deltaDashLanguage` cookie. Supported values:
 
 - `zh`
 - `en`
@@ -125,7 +131,9 @@ Do not assume user-facing text fields are plain strings.
 
 ## Database and storage setup
 
-The current schema lives in `db/schema.sql`.
+The current schema snapshot lives in `db/schema.sql`.
+
+For manual environment updates, create and run a new rerunnable file under `db/migrations/`. Migration files must stay scoped to dd-owned objects plus `public.dd_is_release_admin()`.
 
 Main data areas include:
 
@@ -155,16 +163,64 @@ That flow:
 - checks shared session state and release-admin membership
 - creates official version rows in `dd_version_list`
 - optionally creates parent-child links in `dd_branch_map`
+- writes explicit transition pricing into `dd_version_transition_prices`
 - uploads files to the `dd-official-releases` bucket
 - stores published file metadata in `dd_version_files`
 
 ## Deployment notes
 
-Before production deployment, make sure:
+This app is intended to be published at:
 
-- Supabase env vars are configured
-- the schema in `db/schema.sql` has been applied
+- `https://deltadash.geeksproductionstudio.com/`
+
+The deployment target is GitHub Pages with a custom domain, not a `github.io/<repo>` subpath deployment.
+
+### Manual deploy
+
+```bash
+npm run deploy
+```
+
+This command will:
+
+- run lint
+- build the static export into `out/`
+- create `out/.nojekyll`
+- emit `out/CNAME` for `deltadash.geeksproductionstudio.com`
+- push the contents of `out/` to the `gh-pages` branch
+
+It does not rely on an automatic GitHub Actions deploy workflow, so publishing stays under direct local control.
+
+### GitHub Pages configuration
+
+In GitHub repository settings:
+
+- set Pages to deploy from the `gh-pages` branch
+- set the custom domain to `deltadash.geeksproductionstudio.com`
+- keep DNS pointing at GitHub Pages for that hostname
+
+### Production expectations
+
+Before deployment, make sure:
+
+- local environment variables are set before running `npm run deploy`
+- `NEXT_PUBLIC_SUPABASE_URL` is available locally
+- `NEXT_PUBLIC_SUPABASE_ANON_KEY` is available locally
+- `NEXT_PUBLIC_APP_ORIGIN` stays `https://deltadash.geeksproductionstudio.com`
+- `NEXT_PUBLIC_SHARED_COOKIE_DOMAIN` stays `.geeksproductionstudio.com`
+- `NEXT_PUBLIC_LOGIN_ORIGIN` stays `https://geeksproductionstudio.com`
+- the required schema/migrations have been applied
 - the required storage buckets exist
 - matching storage and table policies are in place
+- you are authenticated for pushing to the repository from this machine
 
-If this app is hosted outside the Geeks Production Studio domain setup, the shared auth cookie behavior in `src/lib/supabase.ts` may need to be adjusted.
+Verification after deploy:
+
+- open `https://deltadash.geeksproductionstudio.com/`
+- confirm deep links like `/versions/`, `/download/`, and `/rules/` load directly
+- confirm Supabase-backed content appears after hydration
+- confirm login redirects through `https://geeksproductionstudio.com/login`
+- confirm approved developer accounts can access `/versions/publish/`
+- confirm official release uploads still land in `dd-official-releases`
+
+If this app is hosted outside the Geeks Production Studio domain setup, the shared auth cookie behavior in `src/lib/supabase.ts` will need different environment values.

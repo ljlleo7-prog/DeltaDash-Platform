@@ -1,4 +1,4 @@
-import Link from 'next/link';
+import { Link } from 'react-router-dom';
 
 export function SectionHeader({
   eyebrow,
@@ -20,7 +20,7 @@ export function SectionHeader({
           <p className="dd-description max-w-3xl">{description}</p>
         </div>
         {action ? (
-          <Link href={action.href} className="dd-action">
+          <Link to={action.href} className="dd-action">
             {action.label}
           </Link>
         ) : null}

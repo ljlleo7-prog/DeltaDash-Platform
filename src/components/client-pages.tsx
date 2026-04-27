@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
-import Link from 'next/link';
+import { Link } from 'react-router-dom';
 import { EmptyState } from '@/components/empty-state';
 import { useLanguage } from '@/components/language-provider';
 import { LocalizedSectionHeader } from '@/components/localized-section-header';
@@ -218,7 +218,7 @@ export function VersionsClientPage() {
             </p>
           </div>
           <Link
-            href="/versions/publish"
+            to="/versions/publish"
             className="inline-flex items-center rounded-full border border-[var(--accent-hot)]/35 bg-[rgba(85,199,255,0.08)] px-5 py-3 text-sm font-medium text-[var(--text-main)] transition hover:bg-[rgba(255,77,90,0.16)]"
           >
             {language === 'en' ? 'Open publish route' : '打开发布页'}
@@ -472,13 +472,13 @@ export function RulesClientPage() {
                   if (!related) return null;
 
                   return (
-                    <Link
+                    <a
                       key={relatedId}
                       href={`#${related.slug}`}
                       className="rounded-full border border-[var(--accent-cold)]/25 bg-[rgba(85,199,255,0.1)] px-3 py-2 text-xs text-[var(--accent-highlight)]"
                     >
                       {language === 'en' ? `Related: ${localize(related.title, language)}` : `相关章节：${localize(related.title, language)}`}
-                    </Link>
+                    </a>
                   );
                 })}
               </div>

@@ -1,13 +1,20 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import Link from 'next/link';
+import { Link } from 'react-router-dom';
 import { getOfficialLoginUrl, getSharedSessionProfile, getSupabaseClient, isReleaseAdminProfile } from '@/lib/supabase';
 import type { Language } from '@/lib/i18n';
 
+type AuthProfile = {
+  display_name?: string | null;
+  token_balance?: number | null;
+  tester_programs?: string[] | null;
+  developer_status?: string | null;
+};
+
 type AuthState = {
   user: { id: string; email?: string | null } | null;
-  profile: { display_name?: string | null; tester_programs?: string[] | null; developer_status?: string | null } | null;
+  profile: AuthProfile | null;
   isApprovedDeveloper: boolean;
   loading: boolean;
 };
@@ -16,6 +23,12 @@ function getDisplayName(state: AuthState, language: Language) {
   if (state.profile?.display_name) return state.profile.display_name;
   if (state.user?.email) return state.user.email.split('@')[0];
   return language === 'en' ? 'Member' : '成员';
+}
+
+function getTokenBalance(profile: AuthProfile | null) {
+  return typeof profile?.token_balance === 'number' && Number.isFinite(profile.token_balance)
+    ? profile.token_balance
+    : null;
 }
 
 export function AuthStatusPanel({ language }: { language: Language }) {
@@ -36,8 +49,8 @@ export function AuthStatusPanel({ language }: { language: Language }) {
     async function loadProfile() {
       const { user, profile } = await getSharedSessionProfile();
       setState({
-        user: user ? { id: user.id, email: user.email ?? null } : null,
-        profile: profile as AuthState['profile'],
+        user,
+        profile: profile as AuthProfile | null,
         isApprovedDeveloper: isReleaseAdminProfile(profile),
         loading: false,
       });
@@ -70,7 +83,10 @@ export function AuthStatusPanel({ language }: { language: Language }) {
     developerBadge: language === 'en' ? 'Approved developer' : '已批准开发者',
     publishRelease: language === 'en' ? 'Publish release' : '发布版本',
     signOut: language === 'en' ? 'Sign out' : '退出登录',
+    tokenBalance: language === 'en' ? 'Tokens remaining' : '剩余代币',
   };
+
+  const balance = getTokenBalance(state.profile);
 
   async function handleSignOut() {
     const supabase = getSupabaseClient();
@@ -88,9 +104,9 @@ export function AuthStatusPanel({ language }: { language: Language }) {
       <div className="dd-panel text-sm text-[var(--text-dim)]">
         <p className="dd-label">{copy.guestMode}</p>
         <p className="dd-copy mt-3">{copy.guestDescription}</p>
-        <Link href={loginUrl} className="dd-inline-action mt-4">
+        <a href={loginUrl} className="dd-inline-action mt-4">
           {copy.signIn}
-        </Link>
+        </a>
       </div>
     );
   }
@@ -101,12 +117,15 @@ export function AuthStatusPanel({ language }: { language: Language }) {
         <div>
           <p className="font-semibold text-[var(--text-main)]">{getDisplayName(state, language)}</p>
           <p className="mt-1 text-xs text-[var(--text-muted)]">{state.user.email ?? copy.ssoFallback}</p>
+          {balance !== null ? (
+            <p className="mt-2 text-xs text-[var(--accent-cold)]">{copy.tokenBalance}: {balance}</p>
+          ) : null}
         </div>
         {state.isApprovedDeveloper ? <span className="dd-badge">{copy.developerBadge}</span> : null}
       </div>
       <div className="mt-4 flex flex-wrap gap-2">
         {state.isApprovedDeveloper ? (
-          <Link href="/versions/publish" className="dd-inline-action">
+          <Link to="/versions/publish" className="dd-inline-action">
             {copy.publishRelease}
           </Link>
         ) : null}

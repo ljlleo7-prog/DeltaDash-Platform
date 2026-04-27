@@ -1,6 +1,6 @@
 'use client';
 
-import Link from 'next/link';
+import { NavLink } from 'react-router-dom';
 import type { ReactNode } from 'react';
 import { AuthStatusPanel } from '@/components/auth-status-panel';
 import { LanguageToggle } from '@/components/language-toggle';
@@ -45,9 +45,9 @@ export function AppShell({ children }: { children: ReactNode }) {
 
       <nav className="dd-nav" aria-label={copy.navLabel}>
         {navItems.map((item) => (
-          <Link key={item.href} href={item.href} className="dd-nav-link">
+          <NavLink key={item.href} to={item.href} className="dd-nav-link">
             {item.label[language]}
-          </Link>
+          </NavLink>
         ))}
       </nav>
 

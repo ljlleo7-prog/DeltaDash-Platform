@@ -1,9 +1,10 @@
-import { createClient, type SupabaseClient } from '@supabase/supabase-js';
+import { createClient, type SupabaseClient, type User } from '@supabase/supabase-js';
 
-const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
-const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
-const sharedCookieDomain = process.env.NEXT_PUBLIC_SHARED_COOKIE_DOMAIN?.trim() || '';
-const loginOrigin = process.env.NEXT_PUBLIC_LOGIN_ORIGIN?.trim() || 'https://geeksproductionstudio.com';
+const url = import.meta.env.VITE_SUPABASE_URL;
+const anonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
+const sharedCookieDomain = import.meta.env.VITE_SHARED_COOKIE_DOMAIN?.trim() || '';
+const loginOrigin = import.meta.env.VITE_LOGIN_ORIGIN?.trim() || 'https://geeksproductionstudio.com';
+const appOrigin = import.meta.env.VITE_APP_ORIGIN?.trim() || 'https://deltadash.geeksproductionstudio.com';
 
 export const isSupabaseConfigured = Boolean(url && anonKey);
 
@@ -17,6 +18,14 @@ export type ProfileAuthority = {
   isReleasePublisher: boolean;
   isTaggedDeltaDashTester: boolean;
   isPurchaseExempt: boolean;
+};
+
+type SharedSessionProfile = {
+  session: Awaited<ReturnType<SupabaseClient['auth']['getSession']>>['data']['session'] | null;
+  user: User | null;
+  profile: Record<string, unknown> | null;
+  authority: ProfileAuthority;
+  isReleaseAdmin: boolean;
 };
 
 let browserClient: SupabaseClient | null = null;
@@ -101,7 +110,7 @@ export function getSupabaseClient() {
   return browserClient;
 }
 
-export async function getSharedSessionProfile() {
+export async function getSharedSessionProfile(): Promise<SharedSessionProfile> {
   const supabase = getSupabaseClient();
   if (!supabase) {
     return {
@@ -114,10 +123,25 @@ export async function getSharedSessionProfile() {
   }
 
   const {
-    data: { session },
+    data: { session: initialSession },
   } = await supabase.auth.getSession();
 
-  const user = session?.user ?? null;
+  let session = initialSession;
+  let user = session?.user ?? null;
+
+  if (!user) {
+    const {
+      data: { user: fallbackUser },
+    } = await supabase.auth.getUser();
+
+    if (fallbackUser) {
+      user = fallbackUser;
+      const {
+        data: { session: refreshedSession },
+      } = await supabase.auth.getSession();
+      session = refreshedSession;
+    }
+  }
 
   if (!user) {
     return {
@@ -162,6 +186,6 @@ export async function uploadOfficialReleaseFile(file: File, versionId: string, f
 }
 
 export function getOfficialLoginUrl(nextPath = '/') {
-  const target = encodeURIComponent(nextPath);
-  return `${loginOrigin}/login?redirect_to=${target}`;
+  const target = new URL(nextPath, appOrigin).toString();
+  return `${loginOrigin}/login?redirect_to=${encodeURIComponent(target)}`;
 }

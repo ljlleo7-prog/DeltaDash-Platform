@@ -1,4 +1,4 @@
-import Link from 'next/link';
+import { Link } from 'react-router-dom';
 import type { Mod } from '@/lib/types';
 import { localize, type Language } from '@/lib/i18n';
 import { EmptyState } from '@/components/empty-state';
@@ -17,7 +17,7 @@ export function UploadCard({
       title={title}
       description={description}
       action={
-        <Link href={cta.href} className="dd-action">
+        <Link to={cta.href} className="dd-action">
           {cta.label}
         </Link>
       }

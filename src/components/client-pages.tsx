@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useLocation } from 'react-router-dom';
 import { EmptyState } from '@/components/empty-state';
 import { useLanguage } from '@/components/language-provider';
 import { LocalizedSectionHeader } from '@/components/localized-section-header';
@@ -543,6 +543,15 @@ export function RulesClientPage() {
 
 export function PublishVersionClientPage({ editVersionId }: { editVersionId?: string }) {
   const { language } = useLanguage();
+  const location = useLocation();
+  const resolvedEditVersionId = useMemo(() => {
+    if (editVersionId) {
+      return editVersionId;
+    }
+
+    const searchParams = new URLSearchParams(location.search);
+    return searchParams.get('edit')?.trim() || undefined;
+  }, [editVersionId, location.search]);
   const { loading, data: versions, error } = useClientData(useMemo(() => getVersions, []), [] as Version[]);
 
   return (
@@ -564,7 +573,7 @@ export function PublishVersionClientPage({ editVersionId }: { editVersionId?: st
 
       {loading ? <LoadingBlock message={language === 'en' ? 'Loading release options…' : '正在加载版本选项…'} /> : null}
       {error ? <ErrorBlock message={language === 'en' ? 'Failed to load publish form data.' : '加载发布表单数据失败。'} /> : null}
-      {!error ? <ReleasePublishForm versions={versions} versionsLoading={loading} language={language} editVersionId={editVersionId} /> : null}
+      {!error ? <ReleasePublishForm versions={versions} versionsLoading={loading} language={language} editVersionId={resolvedEditVersionId} /> : null}
     </div>
   );
 }

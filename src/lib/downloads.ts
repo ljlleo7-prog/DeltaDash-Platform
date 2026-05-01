@@ -53,6 +53,23 @@ function getFallbackLoginUrl() {
   return getOfficialLoginUrl(`${window.location.pathname}${window.location.search}${window.location.hash}` || '/download');
 }
 
+function resolveConfiguredMediaFireEnv(name: string) {
+  const env = import.meta.env as Record<string, string | undefined>;
+  return env[name]?.trim() || '';
+}
+
+function canResolveMediaFireQuickKey() {
+  return Boolean(
+    resolveConfiguredMediaFireEnv('VITE_MEDIAFIRE_SESSION_TOKEN')
+    || resolveConfiguredMediaFireEnv('VITE_MEDIAFIRE_API_KEY')
+    || (
+      resolveConfiguredMediaFireEnv('VITE_MEDIAFIRE_APP_ID')
+      && resolveConfiguredMediaFireEnv('VITE_MEDIAFIRE_EMAIL')
+      && resolveConfiguredMediaFireEnv('VITE_MEDIAFIRE_PASSWORD')
+    ),
+  );
+}
+
 export async function redeemReleaseDownload({ versionId, fileId, mode }: RedeemPayload): Promise<RedeemDownloadResult> {
   if (!isSupabaseConfigured) {
     return { ok: false, code: 'NOT_CONFIGURED', message: 'Supabase env is not configured.' };
@@ -111,14 +128,15 @@ export async function redeemReleaseDownload({ versionId, fileId, mode }: RedeemP
   }
 
   try {
-    const directUrl = releaseFile.mediafire_quickkey
-      ? await getMediaFireDirectDownloadUrl(releaseFile.mediafire_quickkey)
+    const canUseMediaFireApi = Boolean(releaseFile.mediafire_quickkey) && canResolveMediaFireQuickKey();
+    const directUrl = canUseMediaFireApi
+      ? await getMediaFireDirectDownloadUrl(releaseFile.mediafire_quickkey!)
       : releaseFile.file_url;
 
     await ddClient.from('dd_download_attempts').update({
       status: 'succeeded',
       metadata: {
-        delivery_mode: releaseFile.mediafire_quickkey ? 'mediafire' : 'public',
+        delivery_mode: canUseMediaFireApi ? 'mediafire' : 'public',
         access_mode: mode,
       },
     }).eq('user_id', user.id).eq('version_id', versionId).eq('file_id', fileId).eq('status', 'started');
@@ -136,7 +154,7 @@ export async function redeemReleaseDownload({ versionId, fileId, mode }: RedeemP
       status: 'failed',
       failure_reason: message,
       metadata: {
-        delivery_mode: releaseFile.mediafire_quickkey ? 'mediafire' : 'public',
+        delivery_mode: releaseFile.mediafire_quickkey && canResolveMediaFireQuickKey() ? 'mediafire' : 'public',
         access_mode: mode,
       },
     }).eq('user_id', user.id).eq('version_id', versionId).eq('file_id', fileId).eq('status', 'started');

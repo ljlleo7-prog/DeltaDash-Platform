@@ -1,9 +1,9 @@
 const MEDIAFIRE_API_BASE = 'https://www.mediafire.com/api/1.5';
-const MEDIAFIRE_APP_ID = process.env.MEDIAFIRE_APP_ID?.trim() || '';
-const MEDIAFIRE_SESSION_TOKEN = process.env.MEDIAFIRE_SESSION_TOKEN?.trim() || '';
-const MEDIAFIRE_API_KEY = process.env.MEDIAFIRE_API_KEY?.trim() || '';
-const MEDIAFIRE_EMAIL = process.env.MEDIAFIRE_EMAIL?.trim() || '';
-const MEDIAFIRE_PASSWORD = process.env.MEDIAFIRE_PASSWORD?.trim() || '';
+const MEDIAFIRE_APP_ID = import.meta.env.VITE_MEDIAFIRE_APP_ID?.trim() || '';
+const MEDIAFIRE_SESSION_TOKEN = import.meta.env.VITE_MEDIAFIRE_SESSION_TOKEN?.trim() || '';
+const MEDIAFIRE_API_KEY = import.meta.env.VITE_MEDIAFIRE_API_KEY?.trim() || '';
+const MEDIAFIRE_EMAIL = import.meta.env.VITE_MEDIAFIRE_EMAIL?.trim() || '';
+const MEDIAFIRE_PASSWORD = import.meta.env.VITE_MEDIAFIRE_PASSWORD?.trim() || '';
 
 let cachedSessionToken = MEDIAFIRE_SESSION_TOKEN;
 

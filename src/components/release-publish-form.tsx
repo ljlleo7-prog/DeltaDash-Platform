@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { getOfficialLoginUrl, getSharedSessionProfile, getSupabaseClient, isSupabaseConfigured } from '@/lib/supabase';
 import { toLocalizedText as normalizeLocalizedText, type Language, type LocalizedText } from '@/lib/i18n';
 import type { Version } from '@/lib/types';
@@ -10,6 +10,16 @@ type TransitionPriceInput = {
   fromVersionId: string;
   transitionType: 'upgrade' | 'fallback';
   tokenPrice: string;
+};
+
+type ReleaseFileInput = {
+  id: string;
+  labelZh: string;
+  labelEn: string;
+  fileType: Version['files'][number]['fileType'];
+  fileUrl: string;
+  mediafireQuickKey: string;
+  sizeLabel: string;
 };
 
 type PublishFormState = {
@@ -54,6 +64,18 @@ function makeTransitionRow(): TransitionPriceInput {
   };
 }
 
+function makeReleaseFileRow(): ReleaseFileInput {
+  return {
+    id: crypto.randomUUID(),
+    labelZh: '',
+    labelEn: '',
+    fileType: 'bundle',
+    fileUrl: '',
+    mediafireQuickKey: '',
+    sizeLabel: '',
+  };
+}
+
 function toLocalizedText(zh: string, en: string): LocalizedText {
   return {
     zh: zh.trim(),
@@ -69,12 +91,8 @@ export function ReleasePublishForm({ versions, versionsLoading = false, language
   const [submitting, setSubmitting] = useState(false);
   const [hydratingEditVersion, setHydratingEditVersion] = useState(false);
   const [transitionPrices, setTransitionPrices] = useState<TransitionPriceInput[]>([makeTransitionRow()]);
+  const [files, setFiles] = useState<ReleaseFileInput[]>([makeReleaseFileRow()]);
   const [form, setForm] = useState<PublishFormState>(emptyForm);
-
-  const editVersion = useMemo(
-    () => (editVersionId ? versions.find((version) => version.id === editVersionId) ?? null : null),
-    [editVersionId, versions],
-  );
 
   const copy = {
     envMissing: language === 'en' ? 'Supabase env is not configured.' : '尚未配置 Supabase 环境变量。',
@@ -138,6 +156,22 @@ export function ReleasePublishForm({ versions, versionsLoading = false, language
     invalidPrice: language === 'en' ? 'Token prices must be zero or greater.' : '代币价格必须大于或等于 0。',
     changelogZh: language === 'en' ? 'Changelog (Chinese, one item per line)' : '更新说明（中文，每行一条）',
     changelogEn: language === 'en' ? 'Changelog (English, one item per line)' : '更新说明（英文，每行一条）',
+    filesTitle: language === 'en' ? 'Release files' : '发布文件',
+    filesDescription:
+      language === 'en'
+        ? 'Manage downloadable file metadata here, including public URLs and MediaFire quickkeys.'
+        : '在此管理可下载文件元数据，包括公开链接与 MediaFire quickkey。',
+    addFile: language === 'en' ? 'Add file' : '添加文件',
+    labelZh: language === 'en' ? 'Label (Chinese)' : '标签（中文）',
+    labelEn: language === 'en' ? 'Label (English)' : '标签（英文）',
+    fileType: language === 'en' ? 'File type' : '文件类型',
+    fileUrl: language === 'en' ? 'File URL' : '文件链接',
+    mediafireQuickKey: language === 'en' ? 'MediaFire quickkey' : 'MediaFire quickkey',
+    sizeLabel: language === 'en' ? 'Size label' : '大小标签',
+    rules: language === 'en' ? 'Rules' : '规则',
+    cards: language === 'en' ? 'Cards' : '卡牌',
+    driverPack: language === 'en' ? 'Driver pack' : '驱动包',
+    bundle: language === 'en' ? 'Bundle' : '整合包',
     remove: language === 'en' ? 'Remove' : '移除',
     publishing: language === 'en' ? 'Publishing…' : '发布中…',
     saving: language === 'en' ? 'Saving…' : '保存中…',
@@ -167,15 +201,11 @@ export function ReleasePublishForm({ versions, versionsLoading = false, language
     if (!editVersionId) {
       setForm(emptyForm);
       setTransitionPrices([makeTransitionRow()]);
+      setFiles([makeReleaseFileRow()]);
       return;
     }
 
     if (versionsLoading) {
-      return;
-    }
-
-    if (!editVersion) {
-      setMessage(copy.missingEditVersion);
       return;
     }
 
@@ -191,10 +221,26 @@ export function ReleasePublishForm({ versions, versionsLoading = false, language
       }
 
       try {
+        const { data: versionRow, error: versionError } = await supabase
+          .from('dd_version_list')
+          .select('id, name, title, status, summary, changelog, first_purchase_token_price')
+          .eq('id', editVersionId)
+          .maybeSingle();
+
+        if (versionError) {
+          throw versionError;
+        }
+
+        if (!versionRow) {
+          setMessage(copy.missingEditVersion);
+          setHydratingEditVersion(false);
+          return;
+        }
+
         const { data: branchRows, error: branchError } = await supabase
           .from('dd_branch_map')
           .select('parent_version_id')
-          .eq('child_version_id', editVersion.id)
+          .eq('child_version_id', editVersionId)
           .limit(1);
 
         if (branchError) {
@@ -204,24 +250,34 @@ export function ReleasePublishForm({ versions, versionsLoading = false, language
         const { data: transitionRows, error: transitionError } = await supabase
           .from('dd_version_transition_prices')
           .select('id, from_version_id, transition_type, token_price')
-          .eq('to_version_id', editVersion.id)
+          .eq('to_version_id', editVersionId)
           .order('created_at');
 
         if (transitionError) {
           throw transitionError;
         }
 
+        const { data: fileRows, error: fileError } = await supabase
+          .from('dd_version_files')
+          .select('id, label, file_type, file_url, mediafire_quickkey, size_label')
+          .eq('version_id', editVersionId)
+          .order('created_at');
+
+        if (fileError) {
+          throw fileError;
+        }
+
         setForm({
-          name: editVersion.name,
-          titleZh: normalizeLocalizedText(editVersion.title).zh,
-          titleEn: normalizeLocalizedText(editVersion.title).en,
-          status: editVersion.status,
-          summaryZh: normalizeLocalizedText(editVersion.summary).zh,
-          summaryEn: normalizeLocalizedText(editVersion.summary).en,
-          changelogZh: editVersion.changelog.map((item) => normalizeLocalizedText(item).zh).filter(Boolean).join('\n'),
-          changelogEn: editVersion.changelog.map((item) => normalizeLocalizedText(item).en).filter(Boolean).join('\n'),
-          parentVersionId: String(branchRows?.[0]?.parent_version_id ?? editVersion.parentVersionId ?? ''),
-          firstPurchaseTokenPrice: String(editVersion.firstPurchaseTokenPrice ?? 0),
+          name: String(versionRow.name ?? ''),
+          titleZh: normalizeLocalizedText(versionRow.title).zh,
+          titleEn: normalizeLocalizedText(versionRow.title).en,
+          status: versionRow.status as Version['status'],
+          summaryZh: normalizeLocalizedText(versionRow.summary).zh,
+          summaryEn: normalizeLocalizedText(versionRow.summary).en,
+          changelogZh: (versionRow.changelog ?? []).map((item: unknown) => normalizeLocalizedText(item).zh).filter(Boolean).join('\n'),
+          changelogEn: (versionRow.changelog ?? []).map((item: unknown) => normalizeLocalizedText(item).en).filter(Boolean).join('\n'),
+          parentVersionId: String(branchRows?.[0]?.parent_version_id ?? ''),
+          firstPurchaseTokenPrice: String(versionRow.first_purchase_token_price ?? 0),
         });
 
         setTransitionPrices(
@@ -234,13 +290,27 @@ export function ReleasePublishForm({ versions, versionsLoading = false, language
               }))
             : [makeTransitionRow()],
         );
+
+        setFiles(
+          fileRows?.length
+            ? fileRows.map((file) => ({
+                id: String(file.id),
+                labelZh: normalizeLocalizedText(file.label).zh,
+                labelEn: normalizeLocalizedText(file.label).en,
+                fileType: file.file_type as ReleaseFileInput['fileType'],
+                fileUrl: String(file.file_url ?? ''),
+                mediafireQuickKey: String(file.mediafire_quickkey ?? ''),
+                sizeLabel: String(file.size_label ?? ''),
+              }))
+            : [makeReleaseFileRow()],
+        );
       } catch (error) {
         setMessage(error instanceof Error ? error.message : copy.loadEditVersionFailed);
       } finally {
         setHydratingEditVersion(false);
       }
     })();
-  }, [copy.clientMissing, copy.loadEditVersionFailed, copy.missingEditVersion, editVersion, editVersionId, versionsLoading]);
+  }, [copy.clientMissing, copy.loadEditVersionFailed, copy.missingEditVersion, editVersionId, versionsLoading]);
 
   const loginUrl = getOfficialLoginUrl(editVersionId ? `/versions/publish?edit=${encodeURIComponent(editVersionId)}` : '/versions/publish');
 
@@ -259,8 +329,7 @@ export function ReleasePublishForm({ versions, versionsLoading = false, language
       return;
     }
 
-    if (editVersionId && !editVersion) {
-      setMessage(copy.missingEditVersion);
+    if (editVersionId && hydratingEditVersion) {
       return;
     }
 
@@ -300,6 +369,8 @@ export function ReleasePublishForm({ versions, versionsLoading = false, language
         zh,
         en: changelogEn[index] ?? '',
       }));
+
+      const activeFiles = files.filter((file) => file.labelZh.trim() || file.labelEn.trim() || file.fileUrl.trim() || file.mediafireQuickKey.trim() || file.sizeLabel.trim());
 
       const payload = {
         name: form.name,
@@ -384,10 +455,37 @@ export function ReleasePublishForm({ versions, versionsLoading = false, language
         }
       }
 
+      const { error: deleteFilesError } = await supabase
+        .from('dd_version_files')
+        .delete()
+        .eq('version_id', versionId);
+
+      if (deleteFilesError) {
+        throw deleteFilesError;
+      }
+
+      if (activeFiles.length) {
+        const { error: fileInsertError } = await supabase.from('dd_version_files').insert(
+          activeFiles.map((file) => ({
+            version_id: versionId,
+            label: toLocalizedText(file.labelZh, file.labelEn),
+            file_type: file.fileType,
+            file_url: file.fileUrl.trim(),
+            mediafire_quickkey: file.mediafireQuickKey.trim() || null,
+            size_label: file.sizeLabel.trim(),
+          })),
+        );
+
+        if (fileInsertError) {
+          throw fileInsertError;
+        }
+      }
+
       setMessage(editVersionId ? copy.updateSuccess : copy.publishSuccess);
       if (!editVersionId) {
         setForm(emptyForm);
         setTransitionPrices([makeTransitionRow()]);
+        setFiles([makeReleaseFileRow()]);
       }
     } catch (error) {
       setMessage(error instanceof Error ? error.message : copy.publishFailed);
@@ -555,6 +653,53 @@ export function ReleasePublishForm({ versions, versionsLoading = false, language
         <Field label={copy.changelogEn}>
           <textarea value={form.changelogEn} onChange={(e) => setForm({ ...form, changelogEn: e.target.value })} rows={5} className="w-full rounded-2xl border border-white/10 bg-black/30 px-4 py-3 text-sm text-white" />
         </Field>
+      </div>
+
+      <div className="space-y-4 rounded-3xl border border-white/10 bg-black/20 p-5">
+        <div className="flex items-center justify-between gap-4">
+          <div>
+            <h3 className="text-lg font-semibold text-white">{copy.filesTitle}</h3>
+            <p className="mt-2 text-sm text-slate-400">{copy.filesDescription}</p>
+          </div>
+          <button type="button" onClick={() => setFiles((current) => [...current, makeReleaseFileRow()])} className="rounded-full border border-white/10 bg-white/5 px-4 py-2 text-xs font-medium text-white">
+            {copy.addFile}
+          </button>
+        </div>
+
+        {files.map((file) => (
+          <div key={file.id} className="space-y-4 rounded-2xl border border-white/10 bg-white/5 p-4">
+            <div className="grid gap-4 md:grid-cols-2">
+              <Field label={copy.labelZh}>
+                <input value={file.labelZh} onChange={(e) => setFiles((current) => current.map((item) => item.id === file.id ? { ...item, labelZh: e.target.value } : item))} className="w-full rounded-2xl border border-white/10 bg-black/30 px-4 py-3 text-sm text-white" />
+              </Field>
+              <Field label={copy.labelEn}>
+                <input value={file.labelEn} onChange={(e) => setFiles((current) => current.map((item) => item.id === file.id ? { ...item, labelEn: e.target.value } : item))} className="w-full rounded-2xl border border-white/10 bg-black/30 px-4 py-3 text-sm text-white" />
+              </Field>
+              <Field label={copy.fileType}>
+                <select value={file.fileType} onChange={(e) => setFiles((current) => current.map((item) => item.id === file.id ? { ...item, fileType: e.target.value as ReleaseFileInput['fileType'] } : item))} className="w-full rounded-2xl border border-white/10 bg-black/30 px-4 py-3 text-sm text-white">
+                  <option value="rules">{copy.rules}</option>
+                  <option value="cards">{copy.cards}</option>
+                  <option value="driver_pack">{copy.driverPack}</option>
+                  <option value="bundle">{copy.bundle}</option>
+                </select>
+              </Field>
+              <Field label={copy.sizeLabel}>
+                <input value={file.sizeLabel} onChange={(e) => setFiles((current) => current.map((item) => item.id === file.id ? { ...item, sizeLabel: e.target.value } : item))} className="w-full rounded-2xl border border-white/10 bg-black/30 px-4 py-3 text-sm text-white" />
+              </Field>
+            </div>
+            <div className="grid gap-4 md:grid-cols-2">
+              <Field label={copy.fileUrl}>
+                <input value={file.fileUrl} onChange={(e) => setFiles((current) => current.map((item) => item.id === file.id ? { ...item, fileUrl: e.target.value } : item))} className="w-full rounded-2xl border border-white/10 bg-black/30 px-4 py-3 text-sm text-white" />
+              </Field>
+              <Field label={copy.mediafireQuickKey}>
+                <input value={file.mediafireQuickKey} onChange={(e) => setFiles((current) => current.map((item) => item.id === file.id ? { ...item, mediafireQuickKey: e.target.value } : item))} className="w-full rounded-2xl border border-white/10 bg-black/30 px-4 py-3 text-sm text-white" />
+              </Field>
+            </div>
+            <button type="button" onClick={() => setFiles((current) => current.length === 1 ? current : current.filter((item) => item.id !== file.id))} className="rounded-full border border-white/10 bg-black/30 px-4 py-2 text-xs font-medium text-slate-200">
+              {copy.remove}
+            </button>
+          </div>
+        ))}
       </div>
 
       {message ? <div className="rounded-2xl border border-white/10 bg-black/20 px-4 py-3 text-sm text-slate-200">{message}</div> : null}

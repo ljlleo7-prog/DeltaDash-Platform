@@ -2,7 +2,14 @@
 
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { getOfficialLoginUrl, getSharedSessionProfile, getSupabaseClient, isReleaseAdminProfile } from '@/lib/supabase';
+import {
+  getOfficialLoginUrl,
+  getSharedSessionProfile,
+  getSupabaseClient,
+  isReleaseAdminProfile,
+  resolveSharedTokenBalance,
+  resolveSharedUserDisplayName,
+} from '@/lib/supabase';
 import type { Language } from '@/lib/i18n';
 
 type AuthProfile = {
@@ -13,22 +20,14 @@ type AuthProfile = {
 };
 
 type AuthState = {
-  user: { id: string; email?: string | null } | null;
+  user: Awaited<ReturnType<typeof getSharedSessionProfile>>['user'];
   profile: AuthProfile | null;
   isApprovedDeveloper: boolean;
   loading: boolean;
 };
 
 function getDisplayName(state: AuthState, language: Language) {
-  if (state.profile?.display_name) return state.profile.display_name;
-  if (state.user?.email) return state.user.email.split('@')[0];
-  return language === 'en' ? 'Member' : '成员';
-}
-
-function getTokenBalance(profile: AuthProfile | null) {
-  return typeof profile?.token_balance === 'number' && Number.isFinite(profile.token_balance)
-    ? profile.token_balance
-    : null;
+  return resolveSharedUserDisplayName(state.user, state.profile) ?? (language === 'en' ? 'Member' : '成员');
 }
 
 export function AuthStatusPanel({ language }: { language: Language }) {
@@ -86,7 +85,7 @@ export function AuthStatusPanel({ language }: { language: Language }) {
     tokenBalance: language === 'en' ? 'Tokens remaining' : '剩余代币',
   };
 
-  const balance = getTokenBalance(state.profile);
+  const balance = resolveSharedTokenBalance(state.profile);
 
   async function handleSignOut() {
     const supabase = getSupabaseClient();

@@ -1,7 +1,8 @@
-import { Outlet, Route, Routes } from 'react-router-dom';
+import { Outlet, Route, Routes, useParams } from 'react-router-dom';
 import { AppShell } from '@/components/app-shell';
 import { LanguageProvider } from '@/components/language-provider';
-import { CommunityClientPage, DownloadClientPage, ForksClientPage, ModsClientPage, PublishVersionClientPage, RulesClientPage, VersionsClientPage } from '@/components/client-pages';
+import { CommunityClientPage, CommunityThreadPage } from '@/components/community';
+import { DownloadClientPage, ForksClientPage, ModsClientPage, PublishVersionClientPage, RulesClientPage, VersionsClientPage } from '@/components/client-pages';
 import HomePage from '@/pages/home-page';
 import PlayPage from '@/pages/play-page';
 
@@ -13,6 +14,11 @@ function AppLayout() {
       </AppShell>
     </LanguageProvider>
   );
+}
+
+function CommunityThreadRoute() {
+  const { threadId } = useParams();
+  return threadId ? <CommunityThreadPage threadId={threadId} /> : null;
 }
 
 export default function App() {
@@ -27,6 +33,7 @@ export default function App() {
         <Route path="mods" element={<ModsClientPage />} />
         <Route path="forks" element={<ForksClientPage />} />
         <Route path="community" element={<CommunityClientPage />} />
+        <Route path="community/:threadId" element={<CommunityThreadRoute />} />
         <Route path="rules" element={<RulesClientPage />} />
       </Route>
     </Routes>

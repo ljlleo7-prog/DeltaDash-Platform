@@ -1,4 +1,4 @@
-import { createClient, type SupabaseClient, type User } from '@supabase/supabase-js';
+import { createClient, type Session, type SupabaseClient, type User } from '@supabase/supabase-js';
 
 const url = import.meta.env.VITE_SUPABASE_URL;
 const anonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
@@ -7,8 +7,12 @@ const loginOrigin = import.meta.env.VITE_LOGIN_ORIGIN?.trim() || 'https://geeksp
 const appOrigin = import.meta.env.VITE_APP_ORIGIN?.trim() || 'https://deltadash.geeksproductionstudio.com';
 
 export const isSupabaseConfigured = Boolean(url && anonKey);
+export const supabaseUrl = url ?? '';
+export const supabaseAnonKey = anonKey ?? '';
 
 type ProfileWithAuthority = {
+  display_name?: string | null;
+  token_balance?: number | null;
   tester_programs?: string[] | null;
   developer_status?: string | null;
 };
@@ -20,8 +24,8 @@ export type ProfileAuthority = {
   isPurchaseExempt: boolean;
 };
 
-type SharedSessionProfile = {
-  session: Awaited<ReturnType<SupabaseClient['auth']['getSession']>>['data']['session'] | null;
+export type SharedSessionProfile = {
+  session: Session | null;
   user: User | null;
   profile: Record<string, unknown> | null;
   authority: ProfileAuthority;
@@ -82,6 +86,35 @@ export function resolveProfileAuthority(profile: ProfileWithAuthority | null | u
 
 export function isReleaseAdminProfile(profile: ProfileWithAuthority | null | undefined) {
   return resolveProfileAuthority(profile).isReleasePublisher;
+}
+
+export function resolveSharedUserDisplayName(user: User | null, profile: ProfileWithAuthority | null | undefined) {
+  const profileDisplayName = profile?.display_name?.trim();
+  if (profileDisplayName) {
+    return profileDisplayName;
+  }
+
+  const userMetadata = user?.user_metadata as Record<string, unknown> | undefined;
+  const metadataNameCandidates = [userMetadata?.display_name, userMetadata?.full_name, userMetadata?.name];
+
+  for (const candidate of metadataNameCandidates) {
+    if (typeof candidate === 'string' && candidate.trim()) {
+      return candidate.trim();
+    }
+  }
+
+  const email = user?.email?.trim();
+  if (email) {
+    return email.split('@')[0];
+  }
+
+  return null;
+}
+
+export function resolveSharedTokenBalance(profile: ProfileWithAuthority | null | undefined) {
+  return typeof profile?.token_balance === 'number' && Number.isFinite(profile.token_balance)
+    ? profile.token_balance
+    : null;
 }
 
 export function getSupabaseClient() {
@@ -164,25 +197,29 @@ export async function getSharedSessionProfile(): Promise<SharedSessionProfile> {
   return { session, user, profile, authority, isReleaseAdmin: authority.isReleasePublisher };
 }
 
-export async function uploadOfficialReleaseFile(file: File, versionId: string, fileType: string) {
+export async function reauthenticateWithPassword(password: string) {
   const supabase = getSupabaseClient();
   if (!supabase) {
     throw new Error('Supabase is not configured.');
   }
 
-  const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, '_');
-  const objectPath = `${versionId}/${fileType}/${Date.now()}_${safeName}`;
+  const {
+    data: { session },
+  } = await supabase.auth.getSession();
 
-  const { error } = await supabase.storage.from('dd-official-releases').upload(objectPath, file, {
-    upsert: false,
+  const email = session?.user?.email?.trim();
+  if (!email) {
+    throw new Error('You must be signed in to confirm this action.');
+  }
+
+  const { error } = await supabase.auth.signInWithPassword({
+    email,
+    password,
   });
 
   if (error) {
-    throw error;
+    throw new Error(error.message || 'Password confirmation failed.');
   }
-
-  const { data } = supabase.storage.from('dd-official-releases').getPublicUrl(objectPath);
-  return { objectPath, publicUrl: data.publicUrl };
 }
 
 export function getOfficialLoginUrl(nextPath = '/') {

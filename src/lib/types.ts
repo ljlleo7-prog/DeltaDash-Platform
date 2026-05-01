@@ -4,6 +4,8 @@ export type VersionStatus = 'stable' | 'beta' | 'experimental';
 
 export type ReleaseFileType = 'rules' | 'cards' | 'driver_pack' | 'bundle';
 export type VersionTransitionType = 'upgrade' | 'fallback';
+export type ReleaseFileDeliveryMode = 'public' | 'redeem';
+export type VersionPurchaseMode = 'owned' | 'transition' | 'first_purchase';
 
 export interface VersionFile {
   id: string;
@@ -11,6 +13,8 @@ export interface VersionFile {
   fileType: ReleaseFileType;
   href: string;
   size: string;
+  deliveryMode?: ReleaseFileDeliveryMode;
+  mediafireQuickKey?: string | null;
 }
 
 export interface VersionTransitionPrice {
@@ -33,6 +37,11 @@ export interface Version {
   firstPurchaseTokenPrice: number;
   transitionPrices: VersionTransitionPrice[];
   files: VersionFile[];
+  officialReleaseAt?: string | null;
+  withdrawnAt?: string | null;
+  isLicensed?: boolean;
+  effectivePricePreview?: number;
+  purchaseModePreview?: VersionPurchaseMode;
 }
 
 export interface Mod {
@@ -69,6 +78,23 @@ export interface Thread {
   linkedModId?: string;
   author: AuthorProfile;
   createdAt: string;
+  updatedAt: string;
+  status: 'published' | 'hidden' | 'locked';
+  replyCount: number;
+}
+
+export interface ThreadReply {
+  id: string;
+  threadId: string;
+  content: LocalizedText;
+  author: AuthorProfile;
+  createdAt: string;
+  updatedAt: string;
+  status: 'published' | 'hidden';
+}
+
+export interface ThreadDetail extends Thread {
+  replies: ThreadReply[];
 }
 
 export interface RuleSection {

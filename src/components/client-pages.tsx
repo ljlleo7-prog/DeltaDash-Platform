@@ -6,10 +6,11 @@ import { EmptyState } from '@/components/empty-state';
 import { useLanguage } from '@/components/language-provider';
 import { LocalizedSectionHeader } from '@/components/localized-section-header';
 import { ModGrid, UploadCard } from '@/components/workshop';
-import { getForks, getMods, getRuleSections, getThreads, getVersions } from '@/lib/platform-data';
+import { redeemReleaseDownload } from '@/lib/downloads';
+import { getForks, getMods, getRuleSections, getVersions } from '@/lib/platform-data';
+import { getSharedSessionProfile } from '@/lib/supabase';
 import { localize, statusLabel } from '@/lib/i18n';
-import type { Fork, Mod, RuleSection, Thread, Version } from '@/lib/types';
-import { AuthorName } from '@/components/author-name';
+import type { Fork, Mod, RuleSection, Version } from '@/lib/types';
 import { ReleasePublishForm } from '@/components/release-publish-form';
 import { VersionTree } from '@/components/version-tree';
 
@@ -55,10 +56,75 @@ function ErrorBlock({ message }: { message: string }) {
   return <div className="rounded-3xl border border-red-400/20 bg-red-500/10 p-6 text-sm text-red-100">{message}</div>;
 }
 
+function triggerBrowserDownload(url: string) {
+  const anchor = document.createElement('a');
+  anchor.href = url;
+  anchor.rel = 'noreferrer';
+  anchor.target = '_self';
+  document.body.appendChild(anchor);
+  anchor.click();
+  anchor.remove();
+}
+
 export function DownloadClientPage() {
   const { language } = useLanguage();
   const { loading, data: versions, error } = useClientData(useMemo(() => getVersions, []), [] as Version[]);
   const latest = versions.find((version) => version.status === 'stable') ?? versions[0];
+  const [redeemingFileId, setRedeemingFileId] = useState<string | null>(null);
+  const [actionMessage, setActionMessage] = useState<string | null>(null);
+
+  const copy = {
+    downloading: language === 'en' ? 'Preparing download…' : '正在准备下载…',
+    download: language === 'en' ? 'Download now' : '立即下载',
+    redownload: language === 'en' ? 'Redownload' : '重新下载',
+    buyNow: language === 'en' ? 'Buy & download' : '购买并下载',
+    owned: language === 'en' ? 'Owned forever' : '永久拥有',
+    transitionPrice: language === 'en' ? 'Upgrade price available' : '可用升级价格',
+    firstPurchasePrice: language === 'en' ? 'First purchase price' : '首购价格',
+    insufficientTokens: language === 'en' ? 'Insufficient tokens for this download.' : '代币不足，无法下载此版本。',
+    signInRequired: language === 'en' ? 'Please sign in before downloading.' : '请先登录再下载。',
+    downloadFailed: language === 'en' ? 'Failed to prepare the download.' : '准备下载失败。',
+  };
+
+  async function handleReleaseDownload(version: Version, fileId: string, href: string, deliveryMode?: Version['files'][number]['deliveryMode']) {
+    setActionMessage(null);
+
+    if (deliveryMode !== 'redeem') {
+      triggerBrowserDownload(href);
+      return;
+    }
+
+    setRedeemingFileId(fileId);
+
+    try {
+      const result = await redeemReleaseDownload({
+        versionId: version.id,
+        fileId,
+        mode: version.isLicensed ? 'download' : 'purchase',
+      });
+      if (!result.ok) {
+        if (result.code === 'NOT_SIGNED_IN' && result.loginUrl) {
+          window.location.assign(result.loginUrl);
+          return;
+        }
+
+        setActionMessage(
+          result.code === 'INSUFFICIENT_TOKENS'
+            ? copy.insufficientTokens
+            : result.code === 'NOT_SIGNED_IN'
+              ? copy.signInRequired
+              : result.message || copy.downloadFailed,
+        );
+        return;
+      }
+
+      triggerBrowserDownload(result.directUrl);
+    } catch {
+      setActionMessage(copy.downloadFailed);
+    } finally {
+      setRedeemingFileId(null);
+    }
+  }
 
   return (
     <div className="space-y-8">
@@ -111,13 +177,34 @@ export function DownloadClientPage() {
             ) : null}
             <div className="mt-6 grid gap-3 md:grid-cols-3">
               {latest.files.map((file) => (
-                <a key={file.id} href={file.href} className="rounded-2xl border border-white/10 bg-black/25 p-4 transition hover:border-[var(--accent-cold)]/35">
+                <button
+                  key={file.id}
+                  type="button"
+                  onClick={() => handleReleaseDownload(latest, file.id, file.href, file.deliveryMode)}
+                  disabled={redeemingFileId === file.id}
+                  className="rounded-2xl border border-white/10 bg-black/25 p-4 text-left transition hover:border-[var(--accent-cold)]/35 disabled:cursor-not-allowed disabled:opacity-60"
+                >
                   <p className="text-sm font-semibold text-white">{localize(file.label, language)}</p>
                   <p className="mt-2 text-xs uppercase tracking-[0.25em] text-slate-500">{file.fileType}</p>
                   <p className="mt-4 text-sm text-slate-300">{file.size}</p>
-                </a>
+                  <p className="mt-2 text-xs text-slate-400">
+                    {latest.isLicensed
+                      ? copy.owned
+                      : latest.purchaseModePreview === 'transition'
+                        ? `${copy.transitionPrice}: ${latest.effectivePricePreview ?? latest.firstPurchaseTokenPrice}`
+                        : `${copy.firstPurchasePrice}: ${latest.effectivePricePreview ?? latest.firstPurchaseTokenPrice}`}
+                  </p>
+                  <p className="mt-3 text-xs text-cyan-300">
+                    {redeemingFileId === file.id
+                      ? copy.downloading
+                      : latest.isLicensed
+                        ? copy.redownload
+                        : copy.buyNow}
+                  </p>
+                </button>
               ))}
             </div>
+            {actionMessage ? <div className="mt-4 rounded-2xl border border-red-400/20 bg-red-500/10 px-4 py-3 text-sm text-red-100">{actionMessage}</div> : null}
           </section>
 
           <section className="grid gap-4 xl:grid-cols-2">
@@ -173,6 +260,25 @@ export function DownloadClientPage() {
 export function VersionsClientPage() {
   const { language } = useLanguage();
   const { loading, data: versions, error } = useClientData(useMemo(() => getVersions, []), [] as Version[]);
+  const [canEditVersions, setCanEditVersions] = useState(false);
+
+  useEffect(() => {
+    let active = true;
+
+    void getSharedSessionProfile()
+      .then(({ authority }) => {
+        if (!active) return;
+        setCanEditVersions(authority.isReleasePublisher);
+      })
+      .catch(() => {
+        if (!active) return;
+        setCanEditVersions(false);
+      });
+
+    return () => {
+      active = false;
+    };
+  }, []);
 
   return (
     <div className="space-y-8">
@@ -197,7 +303,7 @@ export function VersionsClientPage() {
       {error ? <ErrorBlock message={language === 'en' ? 'Failed to load release history.' : '加载版本历史失败。'} /> : null}
 
       {!loading && !error && versions.length ? (
-        <VersionTree versions={versions} language={language} />
+        <VersionTree versions={versions} language={language} canEditVersions={canEditVersions} />
       ) : null}
 
       {!loading && !error && !versions.length ? (
@@ -213,8 +319,8 @@ export function VersionsClientPage() {
             <h3 className="text-lg font-semibold text-white">{language === 'en' ? 'Official release publishing' : '官方版本发布'}</h3>
             <p className="mt-2 text-sm leading-6 text-slate-400">
               {language === 'en'
-                ? 'Approved developers can publish official versions, define first-purchase and transition pricing, attach branch relationships, and upload files from the dedicated publishing route.'
-                : '已批准开发者可通过专用发布页发布官方版本、设置首购与版本转换价格、维护分支关系并上传关联文件。'}
+                ? 'Approved developers can publish official versions, define first-purchase and transition pricing, and attach branch relationships from the dedicated publishing route.'
+                : '已批准开发者可通过专用发布页发布官方版本、设置首购与版本转换价格，并维护分支关系。'}
             </p>
           </div>
           <Link
@@ -363,68 +469,6 @@ export function ForksClientPage() {
   );
 }
 
-export function CommunityClientPage() {
-  const { language } = useLanguage();
-  const { loading, data: threads, error } = useClientData(useMemo(() => getThreads, []), [] as Thread[]);
-
-  return (
-    <div className="space-y-8">
-      <LocalizedSectionHeader
-        copy={{
-          zh: {
-            eyebrow: '社区',
-            title: '关联版本与模组的讨论',
-            description: '围绕官方版本与社区内容集中整理问题、反馈与平衡讨论。',
-          },
-          en: {
-            eyebrow: 'Community',
-            title: 'Discussion linked to releases and mods',
-            description: 'Keep discussion anchored to versions and mods so feedback stays attached to the right artifact.',
-          },
-        }}
-      />
-
-      <EmptyState
-        title={language === 'en' ? 'Posting is not open in this build yet' : '当前版本暂未开放发帖'}
-        description={language === 'en' ? 'This page currently serves as a read-only discussion archive. New thread publishing will appear once the complete submission flow is available.' : '当前页面作为只读讨论归档使用。待完整投稿流程开放后，这里会提供新建讨论串入口。'}
-      />
-
-      {loading ? <LoadingBlock message={language === 'en' ? 'Loading discussion threads…' : '正在加载讨论串…'} /> : null}
-      {error ? <ErrorBlock message={language === 'en' ? 'Failed to load discussion threads.' : '加载讨论串失败。'} /> : null}
-
-      {!loading && !error && threads.length ? (
-        <section className="space-y-4">
-          {threads.map((thread) => (
-            <article key={thread.id} className="rounded-3xl border border-white/10 bg-black/30 p-5">
-              <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
-                <div>
-                  <h3 className="text-lg font-semibold text-white">{localize(thread.title, language)}</h3>
-                  <p className="mt-3 text-sm leading-6 text-slate-400">{localize(thread.content, language)}</p>
-                </div>
-                <div className="rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-xs text-slate-300">
-                  <p><AuthorName author={thread.author} /></p>
-                  <p className="mt-1 text-slate-500">{thread.createdAt}</p>
-                </div>
-              </div>
-              <div className="mt-4 flex flex-wrap gap-2 text-xs text-slate-300">
-                {thread.linkedVersionId ? <span className="rounded-full border border-[var(--accent-hot)]/25 bg-[rgba(255,77,90,0.14)] px-3 py-1 text-[var(--text-main)]">{language === 'en' ? `Version: ${thread.linkedVersionId}` : `版本：${thread.linkedVersionId}`}</span> : null}
-                {thread.linkedModId ? <span className="rounded-full border border-cyan-400/20 bg-cyan-500/10 px-3 py-1">{language === 'en' ? `Mod: ${thread.linkedModId}` : `模组：${thread.linkedModId}`}</span> : null}
-              </div>
-            </article>
-          ))}
-        </section>
-      ) : null}
-
-      {!loading && !error && !threads.length ? (
-        <EmptyState
-          title={language === 'en' ? 'No discussion threads yet' : '暂无讨论串'}
-          description={language === 'en' ? 'Community discussion threads will appear here after they are created on the platform.' : '当社区讨论上线后，相关讨论串会显示在这里。'}
-        />
-      ) : null}
-    </div>
-  );
-}
-
 export function RulesClientPage() {
   const { language } = useLanguage();
   const { loading, data: rules, error } = useClientData(useMemo(() => getRuleSections, []), [] as RuleSection[]);
@@ -497,7 +541,7 @@ export function RulesClientPage() {
   );
 }
 
-export function PublishVersionClientPage() {
+export function PublishVersionClientPage({ editVersionId }: { editVersionId?: string }) {
   const { language } = useLanguage();
   const { loading, data: versions, error } = useClientData(useMemo(() => getVersions, []), [] as Version[]);
 
@@ -508,19 +552,19 @@ export function PublishVersionClientPage() {
           zh: {
             eyebrow: '开发者发布',
             title: '发布官方 Delta Dash 版本',
-            description: '此页面仅限已批准开发者使用，用于写入 dd_version_list、dd_branch_map、dd_version_transition_prices 与 dd_version_files。',
+            description: '此页面仅限已批准开发者使用，用于写入 dd_version_list、dd_branch_map 与 dd_version_transition_prices。',
           },
           en: {
             eyebrow: 'Developer releases',
             title: 'Publish official Delta Dash releases',
-            description: 'This route is reserved for approved developers and writes to dd_version_list, dd_branch_map, dd_version_transition_prices, and dd_version_files.',
+            description: 'This route is reserved for approved developers and writes to dd_version_list, dd_branch_map, and dd_version_transition_prices.',
           },
         }}
       />
 
       {loading ? <LoadingBlock message={language === 'en' ? 'Loading release options…' : '正在加载版本选项…'} /> : null}
       {error ? <ErrorBlock message={language === 'en' ? 'Failed to load publish form data.' : '加载发布表单数据失败。'} /> : null}
-      {!error ? <ReleasePublishForm versions={versions} language={language} /> : null}
+      {!error ? <ReleasePublishForm versions={versions} versionsLoading={loading} language={language} editVersionId={editVersionId} /> : null}
     </div>
   );
 }

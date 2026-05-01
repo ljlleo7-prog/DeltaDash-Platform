@@ -1,3 +1,4 @@
+import { Link } from 'react-router-dom';
 import type { Version, VersionTransitionPrice } from '@/lib/types';
 import { localize, statusLabel, type Language } from '@/lib/i18n';
 
@@ -7,13 +8,13 @@ const statusClasses: Record<Version['status'], string> = {
   experimental: 'dd-badge dd-status-experimental',
 };
 
-export function VersionTree({ versions, language }: { versions: Version[]; language: Language }) {
+export function VersionTree({ versions, language, canEditVersions = false }: { versions: Version[]; language: Language; canEditVersions?: boolean }) {
   const roots = versions.filter((version) => !version.parentVersionId);
 
   return (
     <div className="space-y-4">
       {roots.map((root) => (
-        <VersionNode key={root.id} version={root} versions={versions} depth={0} language={language} />
+        <VersionNode key={root.id} version={root} versions={versions} depth={0} language={language} canEditVersions={canEditVersions} />
       ))}
     </div>
   );
@@ -24,11 +25,13 @@ function VersionNode({
   versions,
   depth,
   language,
+  canEditVersions,
 }: {
   version: Version;
   versions: Version[];
   depth: number;
   language: Language;
+  canEditVersions: boolean;
 }) {
   const children = versions.filter((candidate) => candidate.parentVersionId === version.id);
 
@@ -59,6 +62,11 @@ function VersionNode({
           <div className="dd-subpanel min-w-28 text-xs text-[var(--text-dim)]">
             <p className="dd-label">{language === 'en' ? 'Files' : '文件'}</p>
             <p className="mt-2 text-base font-semibold text-[var(--text-main)]">{version.files.length}</p>
+            {canEditVersions ? (
+              <Link to={`/versions/publish?edit=${encodeURIComponent(version.id)}`} className="dd-inline-action mt-4 inline-flex text-[11px]">
+                {language === 'en' ? 'Edit release' : '编辑版本'}
+              </Link>
+            ) : null}
           </div>
         </div>
       </div>
@@ -66,7 +74,7 @@ function VersionNode({
       {children.length > 0 ? (
         <div className="border-l border-dashed border-[rgba(85,199,255,0.25)] pl-4">
           {children.map((child) => (
-            <VersionNode key={child.id} version={child} versions={versions} depth={depth + 1} language={language} />
+            <VersionNode key={child.id} version={child} versions={versions} depth={depth + 1} language={language} canEditVersions={canEditVersions} />
           ))}
         </div>
       ) : null}

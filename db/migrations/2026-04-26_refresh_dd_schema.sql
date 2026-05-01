@@ -55,17 +55,6 @@ create table if not exists dd_version_files (
 );
 
 create table if not exists dd_mods (
-  id uuid primary key default gen_random_uuid(),
-  name jsonb not null default jsonb_build_object('zh', '', 'en', ''),
-  description jsonb not null default jsonb_build_object('zh', '', 'en', ''),
-  base_version_id uuid references dd_version_list(id) on delete set null,
-  tags jsonb not null default '[]'::jsonb,
-  compatibility jsonb not null default jsonb_build_object('zh', '', 'en', ''),
-  author_id uuid references auth.users(id) on delete set null,
-  author_name text not null default '',
-  file_url text not null,
-  created_at timestamp with time zone not null default timezone('utc', now())
-);
 
 create table if not exists dd_forks (
   id uuid primary key default gen_random_uuid(),

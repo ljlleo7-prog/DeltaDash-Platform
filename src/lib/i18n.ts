@@ -23,8 +23,24 @@ export function toLocalizedText(value: unknown): LocalizedText {
     };
   }
 
-  const text = typeof value === 'string' ? value : '';
-  return { zh: text, en: text };
+  if (typeof value === 'string') {
+    const text = value.trim();
+
+    if (text.startsWith('{') && text.endsWith('}')) {
+      try {
+        const parsed = JSON.parse(text) as unknown;
+        if (typeof parsed === 'object' && parsed && 'zh' in parsed && 'en' in parsed) {
+          return toLocalizedText(parsed);
+        }
+      } catch {
+        // fall through to plain string behavior
+      }
+    }
+
+    return { zh: value, en: value };
+  }
+
+  return { zh: '', en: '' };
 }
 
 export function toLocalizedList(values: unknown[] | null | undefined): LocalizedText[] {

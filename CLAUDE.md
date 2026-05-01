@@ -51,4 +51,5 @@ Use English unless otherwise specified.
 
 - Read the relevant guide in `node_modules/next/dist/docs/` before changing framework behavior; this project uses a Next.js version with breaking changes relative to older conventions.
 - When database schema changes are needed, always create a new manually runnable SQL file under `db/migrations/` instead of relying only on `db/schema.sql` edits.
+- Never edit an existing migration file to add follow-up schema changes. Create a brand new rerunnable migration file for every later schema update, even if it touches the same tables/functions.
 - Migration files must be safe for the user's editor-run workflow: rerunnable where practical, and scoped to dd-related objects plus `public.dd_is_release_admin()` unless the user explicitly broadens scope.

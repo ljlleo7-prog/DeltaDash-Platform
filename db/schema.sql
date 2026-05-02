@@ -44,9 +44,23 @@ create table if not exists dd_version_files (
   file_type text not null check (file_type in ('rules', 'cards', 'driver_pack', 'bundle')),
   file_url text not null,
   mediafire_quickkey text,
+  baidu_netdisk_url text,
+  baidu_extraction_code text,
   size_label text not null default '',
   created_at timestamp with time zone not null default timezone('utc', now())
 );
+
+comment on column dd_version_files.file_url is
+  'Primary approved release file URL or share link exposed to entitled downloaders after purchase/redeem.';
+
+comment on column dd_version_files.mediafire_quickkey is
+  'Optional MediaFire quickkey metadata retained for diagnostics or future resolver workflows.';
+
+comment on column dd_version_files.baidu_netdisk_url is
+  'Optional Baidu Netdisk mirror URL exposed to entitled downloaders after purchase/redeem.';
+
+comment on column dd_version_files.baidu_extraction_code is
+  'Optional Baidu Netdisk extraction code shown with the Baidu mirror after purchase/redeem.';
 
 create table if not exists dd_user_version_licenses (
   id uuid primary key default gen_random_uuid(),
@@ -356,6 +370,7 @@ create policy "public read dd_threads" on dd_threads for select using (status = 
 create policy "public read dd_thread_replies" on dd_thread_replies for select using (status = 'published');
 create policy "public read dd_rule_sections" on dd_rule_sections for select using (true);
 create policy "user read dd_download_attempts" on dd_download_attempts for select to authenticated using (auth.uid() = user_id or public.dd_is_release_admin());
+create policy "users read own wallet for deltadash" on public.wallets for select to authenticated using (auth.uid() = user_id);
 
 create policy "admin write dd_version_list" on dd_version_list for all to authenticated using (public.dd_is_release_admin()) with check (public.dd_is_release_admin());
 create policy "admin write dd_branch_map" on dd_branch_map for all to authenticated using (public.dd_is_release_admin()) with check (public.dd_is_release_admin());

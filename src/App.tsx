@@ -5,6 +5,8 @@ import { CommunityClientPage, CommunityThreadPage } from '@/components/community
 import { DownloadClientPage, ForksClientPage, ModsClientPage, PublishVersionClientPage, RulesClientPage, VersionsClientPage } from '@/components/client-pages';
 import HomePage from '@/pages/home-page';
 import PlayPage from '@/pages/play-page';
+import TermsPage from '@/pages/terms-page';
+import { DlcPublishClientPage } from '@/pages/dlc-publish-page';
 
 function AppLayout() {
   return (
@@ -30,11 +32,13 @@ export default function App() {
         <Route path="download" element={<DownloadClientPage />} />
         <Route path="versions" element={<VersionsClientPage />} />
         <Route path="versions/publish" element={<PublishVersionClientPage />} />
+        <Route path="dlc/publish" element={<DlcPublishClientPage />} />
         <Route path="mods" element={<ModsClientPage />} />
         <Route path="forks" element={<ForksClientPage />} />
         <Route path="community" element={<CommunityClientPage />} />
         <Route path="community/:threadId" element={<CommunityThreadRoute />} />
         <Route path="rules" element={<RulesClientPage />} />
+        <Route path="terms" element={<TermsPage />} />
       </Route>
     </Routes>
   );

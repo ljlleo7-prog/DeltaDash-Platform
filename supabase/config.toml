@@ -1,0 +1,2 @@
+[functions.resolve-release-download]
+verify_jwt = false

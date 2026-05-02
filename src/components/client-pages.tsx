@@ -6,11 +6,14 @@ import { EmptyState } from '@/components/empty-state';
 import { useLanguage } from '@/components/language-provider';
 import { LocalizedSectionHeader } from '@/components/localized-section-header';
 import { ModGrid, UploadCard } from '@/components/workshop';
+import { DlcSubCard } from '@/components/dlc-sub-card';
+import { ModSubmitForm } from '@/components/mod-submit-form';
+import { RatingWidget } from '@/components/rating-widget';
 import { redeemReleaseDownload } from '@/lib/downloads';
-import { getForks, getMods, getRuleSections, getVersions } from '@/lib/platform-data';
+import { getDlcs, getForks, getFundPoolBalance, getMods, getRuleSections, getVersions } from '@/lib/platform-data';
 import { getSharedSessionProfile } from '@/lib/supabase';
 import { localize, statusLabel } from '@/lib/i18n';
-import type { Fork, Mod, RuleSection, Version } from '@/lib/types';
+import type { Dlc, Fork, Mod, RuleSection, Version } from '@/lib/types';
 import { ReleasePublishForm } from '@/components/release-publish-form';
 import { VersionTree } from '@/components/version-tree';
 
@@ -18,6 +21,13 @@ type AsyncState<T> = {
   loading: boolean;
   data: T;
   error: boolean;
+};
+
+type DownloadOptionsState = {
+  fileLabel: string;
+  primaryUrl: string;
+  baiduNetdiskUrl: string | null;
+  baiduExtractionCode: string | null;
 };
 
 function useClientData<T>(loader: () => Promise<T>, initialData: T): AsyncState<T> {
@@ -69,9 +79,11 @@ function triggerBrowserDownload(url: string) {
 export function DownloadClientPage() {
   const { language } = useLanguage();
   const { loading, data: versions, error } = useClientData(useMemo(() => getVersions, []), [] as Version[]);
+  const { data: dlcs } = useClientData(useMemo(() => getDlcs, []), [] as Dlc[]);
   const latest = versions.find((version) => version.status === 'stable') ?? versions[0];
   const [redeemingFileId, setRedeemingFileId] = useState<string | null>(null);
   const [actionMessage, setActionMessage] = useState<string | null>(null);
+  const [downloadOptions, setDownloadOptions] = useState<DownloadOptionsState | null>(null);
 
   const copy = {
     downloading: language === 'en' ? 'Preparing download…' : '正在准备下载…',
@@ -84,22 +96,28 @@ export function DownloadClientPage() {
     insufficientTokens: language === 'en' ? 'Insufficient tokens for this download.' : '代币不足，无法下载此版本。',
     signInRequired: language === 'en' ? 'Please sign in before downloading.' : '请先登录再下载。',
     downloadFailed: language === 'en' ? 'Failed to prepare the download.' : '准备下载失败。',
+    primaryDownload: language === 'en' ? 'Primary download' : '主要下载',
+    baiduMirror: language === 'en' ? 'Baidu Netdisk mirror' : '百度网盘备用下载',
+    baiduCode: language === 'en' ? 'Extraction code' : '提取码',
+    openBaidu: language === 'en' ? 'Open Baidu mirror' : '打开百度网盘',
+    dismiss: language === 'en' ? 'Dismiss' : '关闭',
   };
 
-  async function handleReleaseDownload(version: Version, fileId: string, href: string, deliveryMode?: Version['files'][number]['deliveryMode']) {
+  async function handleReleaseDownload(version: Version, file: Version['files'][number]) {
     setActionMessage(null);
+    setDownloadOptions(null);
 
-    if (deliveryMode !== 'redeem') {
-      triggerBrowserDownload(href);
+    if (file.deliveryMode !== 'redeem') {
+      triggerBrowserDownload(file.href);
       return;
     }
 
-    setRedeemingFileId(fileId);
+    setRedeemingFileId(file.id);
 
     try {
       const result = await redeemReleaseDownload({
         versionId: version.id,
-        fileId,
+        fileId: file.id,
         mode: version.isLicensed ? 'download' : 'purchase',
       });
       if (!result.ok) {
@@ -107,7 +125,6 @@ export function DownloadClientPage() {
           window.location.assign(result.loginUrl);
           return;
         }
-
         setActionMessage(
           result.code === 'INSUFFICIENT_TOKENS'
             ? copy.insufficientTokens
@@ -118,7 +135,12 @@ export function DownloadClientPage() {
         return;
       }
 
-      triggerBrowserDownload(result.directUrl);
+      setDownloadOptions({
+        fileLabel: localize(file.label, language),
+        primaryUrl: result.primaryUrl,
+        baiduNetdiskUrl: result.baiduNetdiskUrl ?? null,
+        baiduExtractionCode: result.baiduExtractionCode ?? null,
+      });
     } catch {
       setActionMessage(copy.downloadFailed);
     } finally {
@@ -180,7 +202,7 @@ export function DownloadClientPage() {
                 <button
                   key={file.id}
                   type="button"
-                  onClick={() => handleReleaseDownload(latest, file.id, file.href, file.deliveryMode)}
+                  onClick={() => handleReleaseDownload(latest, file)}
                   disabled={redeemingFileId === file.id}
                   className="rounded-2xl border border-white/10 bg-black/25 p-4 text-left transition hover:border-[var(--accent-cold)]/35 disabled:cursor-not-allowed disabled:opacity-60"
                 >
@@ -205,6 +227,41 @@ export function DownloadClientPage() {
               ))}
             </div>
             {actionMessage ? <div className="mt-4 rounded-2xl border border-red-400/20 bg-red-500/10 px-4 py-3 text-sm text-red-100">{actionMessage}</div> : null}
+            {downloadOptions ? (
+              <div className="mt-4 rounded-2xl border border-cyan-300/20 bg-cyan-500/10 px-4 py-4 text-sm text-cyan-50">
+                <p className="font-semibold text-white">{downloadOptions.fileLabel}</p>
+                <div className="mt-3 flex flex-wrap gap-3">
+                  <a
+                    href={downloadOptions.primaryUrl}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="rounded-full border border-cyan-300/30 bg-black/20 px-4 py-2 text-xs font-medium text-cyan-100 transition hover:bg-black/30"
+                  >
+                    {copy.primaryDownload}
+                  </a>
+                  {downloadOptions.baiduNetdiskUrl ? (
+                    <a
+                      href={downloadOptions.baiduNetdiskUrl}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="rounded-full border border-cyan-300/30 bg-black/20 px-4 py-2 text-xs font-medium text-cyan-100 transition hover:bg-black/30"
+                    >
+                      {copy.openBaidu}
+                    </a>
+                  ) : null}
+                  <button
+                    type="button"
+                    onClick={() => setDownloadOptions(null)}
+                    className="rounded-full border border-white/10 bg-black/20 px-4 py-2 text-xs font-medium text-slate-300 transition hover:bg-black/30"
+                  >
+                    {copy.dismiss}
+                  </button>
+                </div>
+                {downloadOptions.baiduNetdiskUrl && downloadOptions.baiduExtractionCode ? (
+                  <p className="mt-3 text-cyan-50/85">{copy.baiduCode}: <span className="font-mono text-white">{downloadOptions.baiduExtractionCode}</span></p>
+                ) : null}
+              </div>
+            ) : null}
           </section>
 
           <section className="grid gap-4 xl:grid-cols-2">
@@ -248,6 +305,10 @@ export function DownloadClientPage() {
                     </li>
                   ))}
                 </ul>
+                {dlcs.filter((dlc) => dlc.supportedVersionIds.includes(version.id)).map((dlc) => (
+                  <DlcSubCard key={dlc.id} dlc={dlc} language={language} />
+                ))}
+                <RatingWidget targetType="version" targetId={version.id} summary={version.rating} language={language} />
               </article>
             ))}
           </section>
@@ -359,6 +420,7 @@ export function VersionsClientPage() {
 export function ModsClientPage() {
   const { language } = useLanguage();
   const { loading, data: mods, error } = useClientData(useMemo(() => getMods, []), [] as Mod[]);
+  const { data: versions } = useClientData(useMemo(() => getVersions, []), [] as Version[]);
 
   return (
     <div className="space-y-8">
@@ -367,21 +429,17 @@ export function ModsClientPage() {
           zh: {
             eyebrow: '模组',
             title: '社区创意工坊',
-            description: '按兼容性与内容方向浏览社区模组。正式投稿入口会在工坊提交流程开放后提供。',
+            description: '浏览社区模组，或投稿你自己的作品。免费模组可获得官方贡献奖励。',
           },
           en: {
             eyebrow: 'Mods',
             title: 'Community workshop',
-            description: 'Browse community mods by compatibility and category. Submission entry will appear once the workshop publishing flow is available.',
+            description: 'Browse community mods or submit your own. Free mods are eligible for official contribution awards.',
           },
         }}
       />
 
-      <UploadCard
-        title={language === 'en' ? 'Workshop submission status' : '工坊投稿状态'}
-        description={language === 'en' ? 'Direct mod publishing is not open in this build yet. Use the catalog below to review currently available community content.' : '当前版本尚未开放直接投稿模组，请先通过下方目录查看已上线的社区内容。'}
-        cta={{ href: '/community', label: language === 'en' ? 'Open community discussions' : '前往社区讨论' }}
-      />
+      <ModSubmitForm versions={versions} language={language} />
 
       {loading ? <LoadingBlock message={language === 'en' ? 'Loading workshop mods…' : '正在加载模组内容…'} /> : null}
       {error ? <ErrorBlock message={language === 'en' ? 'Failed to load mods.' : '加载模组失败。'} /> : null}

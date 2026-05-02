@@ -1,9 +1,14 @@
 import { createClient } from '@supabase/supabase-js';
-import { getMediaFireDirectDownloadUrl } from '@/lib/mediafire';
 import { getOfficialLoginUrl, getSupabaseClient, isSupabaseConfigured, supabaseAnonKey, supabaseUrl } from '@/lib/supabase';
 
+export type DownloadOption = {
+  primaryUrl: string;
+  baiduNetdiskUrl?: string | null;
+  baiduExtractionCode?: string | null;
+};
+
 export type RedeemDownloadResult =
-  | { ok: true; directUrl: string; chargedTokens: number; alreadyOwned: boolean }
+  | { ok: true; primaryUrl: string; chargedTokens: number; alreadyOwned: boolean; baiduNetdiskUrl?: string | null; baiduExtractionCode?: string | null }
   | { ok: false; code: 'NOT_CONFIGURED' | 'NOT_SIGNED_IN' | 'FILE_NOT_FOUND' | 'INSUFFICIENT_TOKENS' | 'REDEEM_FAILED'; message: string; loginUrl?: string };
 
 type RedeemPayload = {
@@ -12,18 +17,18 @@ type RedeemPayload = {
   mode: 'purchase' | 'download';
 };
 
-type ReleaseFileRecord = {
-  id: string;
-  version_id: string;
-  mediafire_quickkey: string | null;
-  file_url: string;
-};
-
 type RpcResult = {
   success?: boolean;
   message?: string;
   charged_tokens?: number;
   already_owned?: boolean;
+  attempt_id?: string;
+};
+
+type ReleaseFileDownloadRow = {
+  file_url?: string | null;
+  baidu_netdisk_url?: string | null;
+  baidu_extraction_code?: string | null;
 };
 
 function createGpsClient(accessToken: string) {
@@ -53,21 +58,29 @@ function getFallbackLoginUrl() {
   return getOfficialLoginUrl(`${window.location.pathname}${window.location.search}${window.location.hash}` || '/download');
 }
 
-function resolveConfiguredMediaFireEnv(name: string) {
-  const env = import.meta.env as Record<string, string | undefined>;
-  return env[name]?.trim() || '';
-}
+async function getDownloadOptions(ddClient: ReturnType<typeof createGpsClient>, versionId: string, fileId: string): Promise<DownloadOption> {
+  const { data, error } = await ddClient
+    .from('dd_version_files')
+    .select('file_url, baidu_netdisk_url, baidu_extraction_code')
+    .eq('id', fileId)
+    .eq('version_id', versionId)
+    .maybeSingle();
 
-function canResolveMediaFireQuickKey() {
-  return Boolean(
-    resolveConfiguredMediaFireEnv('VITE_MEDIAFIRE_SESSION_TOKEN')
-    || resolveConfiguredMediaFireEnv('VITE_MEDIAFIRE_API_KEY')
-    || (
-      resolveConfiguredMediaFireEnv('VITE_MEDIAFIRE_APP_ID')
-      && resolveConfiguredMediaFireEnv('VITE_MEDIAFIRE_EMAIL')
-      && resolveConfiguredMediaFireEnv('VITE_MEDIAFIRE_PASSWORD')
-    ),
-  );
+  if (error || !data) {
+    throw new Error(error?.message || 'Release file not found.');
+  }
+
+  const file = data as ReleaseFileDownloadRow;
+  const primaryUrl = file.file_url?.trim() || '';
+  if (!primaryUrl) {
+    throw new Error('Download URL is missing for this release file.');
+  }
+
+  return {
+    primaryUrl,
+    baiduNetdiskUrl: file.baidu_netdisk_url?.trim() || null,
+    baiduExtractionCode: file.baidu_extraction_code?.trim() || null,
+  };
 }
 
 export async function redeemReleaseDownload({ versionId, fileId, mode }: RedeemPayload): Promise<RedeemDownloadResult> {
@@ -97,7 +110,7 @@ export async function redeemReleaseDownload({ versionId, fileId, mode }: RedeemP
 
   const { data: file, error: fileError } = await ddClient
     .from('dd_version_files')
-    .select('id, version_id, mediafire_quickkey, file_url')
+    .select('id, version_id')
     .eq('id', fileId)
     .eq('version_id', versionId)
     .maybeSingle();
@@ -106,7 +119,6 @@ export async function redeemReleaseDownload({ versionId, fileId, mode }: RedeemP
     return { ok: false, code: 'FILE_NOT_FOUND', message: 'Release file not found.' };
   }
 
-  const releaseFile = file as ReleaseFileRecord;
   const rpcName = mode === 'purchase' ? 'purchase_release_license' : 'redeem_release_download';
   const { data: rpcData, error: rpcError } = await ddClient.rpc(rpcName, {
     p_version_id: versionId,
@@ -127,38 +139,24 @@ export async function redeemReleaseDownload({ versionId, fileId, mode }: RedeemP
     return { ok: false, code: 'REDEEM_FAILED', message: rpcResult.message ?? 'Download redemption failed.' };
   }
 
-  try {
-    const canUseMediaFireApi = Boolean(releaseFile.mediafire_quickkey) && canResolveMediaFireQuickKey();
-    const directUrl = canUseMediaFireApi
-      ? await getMediaFireDirectDownloadUrl(releaseFile.mediafire_quickkey!)
-      : releaseFile.file_url;
+  const attemptId = typeof rpcResult?.attempt_id === 'string' ? rpcResult.attempt_id.trim() : '';
+  if (!attemptId) {
+    return { ok: false, code: 'REDEEM_FAILED', message: 'Download attempt could not be created.' };
+  }
 
-    await ddClient.from('dd_download_attempts').update({
-      status: 'succeeded',
-      metadata: {
-        delivery_mode: canUseMediaFireApi ? 'mediafire' : 'public',
-        access_mode: mode,
-      },
-    }).eq('user_id', user.id).eq('version_id', versionId).eq('file_id', fileId).eq('status', 'started');
+  try {
+    const downloadOptions = await getDownloadOptions(ddClient, versionId, fileId);
 
     return {
       ok: true,
-      directUrl,
+      primaryUrl: downloadOptions.primaryUrl,
+      baiduNetdiskUrl: downloadOptions.baiduNetdiskUrl,
+      baiduExtractionCode: downloadOptions.baiduExtractionCode,
       chargedTokens: Math.max(0, Number(rpcResult?.charged_tokens ?? 0)),
       alreadyOwned: Boolean(rpcResult?.already_owned),
     };
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Download redemption failed.';
-
-    await ddClient.from('dd_download_attempts').update({
-      status: 'failed',
-      failure_reason: message,
-      metadata: {
-        delivery_mode: releaseFile.mediafire_quickkey && canResolveMediaFireQuickKey() ? 'mediafire' : 'public',
-        access_mode: mode,
-      },
-    }).eq('user_id', user.id).eq('version_id', versionId).eq('file_id', fileId).eq('status', 'started');
-
     return { ok: false, code: 'REDEEM_FAILED', message };
   }
 }

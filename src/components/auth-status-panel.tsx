@@ -5,6 +5,7 @@ import { Link } from 'react-router-dom';
 import {
   getOfficialLoginUrl,
   getSharedSessionProfile,
+  getSharedWallet,
   getSupabaseClient,
   isReleaseAdminProfile,
   resolveSharedTokenBalance,
@@ -13,8 +14,8 @@ import {
 import type { Language } from '@/lib/i18n';
 
 type AuthProfile = {
+  username?: string | null;
   display_name?: string | null;
-  token_balance?: number | null;
   tester_programs?: string[] | null;
   developer_status?: string | null;
 };
@@ -22,6 +23,7 @@ type AuthProfile = {
 type AuthState = {
   user: Awaited<ReturnType<typeof getSharedSessionProfile>>['user'];
   profile: AuthProfile | null;
+  tokenBalance: number | null;
   isApprovedDeveloper: boolean;
   loading: boolean;
 };
@@ -34,6 +36,7 @@ export function AuthStatusPanel({ language }: { language: Language }) {
   const [state, setState] = useState<AuthState>({
     user: null,
     profile: null,
+    tokenBalance: null,
     isApprovedDeveloper: false,
     loading: true,
   });
@@ -47,9 +50,11 @@ export function AuthStatusPanel({ language }: { language: Language }) {
 
     async function loadProfile() {
       const { user, profile } = await getSharedSessionProfile();
+      const wallet = user ? await getSharedWallet(user.id) : null;
       setState({
         user,
         profile: profile as AuthProfile | null,
+        tokenBalance: resolveSharedTokenBalance(wallet),
         isApprovedDeveloper: isReleaseAdminProfile(profile),
         loading: false,
       });
@@ -85,13 +90,13 @@ export function AuthStatusPanel({ language }: { language: Language }) {
     tokenBalance: language === 'en' ? 'Tokens remaining' : '剩余代币',
   };
 
-  const balance = resolveSharedTokenBalance(state.profile);
+  const balance = state.tokenBalance;
 
   async function handleSignOut() {
     const supabase = getSupabaseClient();
     if (!supabase) return;
     await supabase.auth.signOut();
-    setState({ user: null, profile: null, isApprovedDeveloper: false, loading: false });
+    setState({ user: null, profile: null, tokenBalance: null, isApprovedDeveloper: false, loading: false });
   }
 
   if (state.loading) {

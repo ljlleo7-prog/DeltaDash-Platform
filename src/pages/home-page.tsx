@@ -1,6 +1,8 @@
 import { Link } from 'react-router-dom';
+import { useEffect, useMemo, useState } from 'react';
 import { useLanguage } from '@/components/language-provider';
 import { LocalizedSectionHeader } from '@/components/localized-section-header';
+import { getFundPoolBalance } from '@/lib/platform-data';
 import type { Language } from '@/lib/i18n';
 
 const featureCards: Record<Language, Array<{ title: string; description: string }>> = {
@@ -48,6 +50,11 @@ const quickLinks: Record<Language, { title: string; links: Array<[string, string
 export default function HomePage() {
   const { language } = useLanguage();
   const links = quickLinks[language];
+  const [fundPool, setFundPool] = useState<number | null>(null);
+
+  useEffect(() => {
+    void getFundPoolBalance().then(setFundPool);
+  }, []);
 
   return (
     <div className="space-y-10">
@@ -67,6 +74,20 @@ export default function HomePage() {
           },
         }}
       />
+
+      {fundPool !== null && (
+        <section className="rounded-3xl border border-[var(--accent-cold)]/30 bg-[linear-gradient(135deg,rgba(85,199,255,0.10),rgba(85,199,255,0.04))] p-6 text-center">
+          <p className="text-xs font-semibold uppercase tracking-[0.35em] text-[var(--accent-cold)]">
+            {language === 'en' ? 'Community Fund Pool' : '社区贡献基金池'}
+          </p>
+          <p className="mt-3 font-[var(--font-heading)] text-4xl font-bold tracking-tight text-white">
+            {fundPool.toLocaleString()}
+          </p>
+          <p className="mt-2 text-sm text-[var(--text-dim)]">
+            {language === 'en' ? 'tokens available for contribution awards' : '代币可用于贡献奖励'}
+          </p>
+        </section>
+      )}
 
       <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
         {featureCards[language].map((card) => (

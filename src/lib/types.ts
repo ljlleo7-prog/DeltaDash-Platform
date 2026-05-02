@@ -15,6 +15,9 @@ export interface VersionFile {
   size: string;
   deliveryMode?: ReleaseFileDeliveryMode;
   mediafireQuickKey?: string | null;
+  sourceUrl?: string | null;
+  baiduNetdiskUrl?: string | null;
+  baiduExtractionCode?: string | null;
 }
 
 export interface VersionTransitionPrice {
@@ -42,6 +45,13 @@ export interface Version {
   isLicensed?: boolean;
   effectivePricePreview?: number;
   purchaseModePreview?: VersionPurchaseMode;
+  rating?: RatingSummary;
+  soldCount?: number;
+}
+
+export interface RatingSummary {
+  average: number;
+  count: number;
 }
 
 export interface Mod {
@@ -52,7 +62,41 @@ export interface Mod {
   tags: LocalizedText[];
   compatibility: LocalizedText;
   author: string;
+  authorId: string | null;
   downloadUrl: string;
+  tokenPrice: number;
+  soldCount: number;
+  isOfficialPick: boolean;
+  isLicensed?: boolean;
+  rating?: RatingSummary;
+}
+
+export interface DlcFile {
+  id: string;
+  dlcId: string;
+  label: LocalizedText;
+  fileUrl: string;
+  size: string;
+}
+
+export interface Dlc {
+  id: string;
+  name: string;
+  title: LocalizedText;
+  description: LocalizedText;
+  supportedVersionIds: string[];
+  firstPurchaseTokenPrice: number;
+  status: 'active' | 'withdrawn';
+  officialReleaseAt?: string | null;
+  files: DlcFile[];
+  isLicensed?: boolean;
+  rating?: RatingSummary;
+  soldCount?: number;
+}
+
+export interface FundPool {
+  balance: number;
+  updatedAt: string;
 }
 
 export interface Fork {

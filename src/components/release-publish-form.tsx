@@ -19,6 +19,8 @@ type ReleaseFileInput = {
   fileType: Version['files'][number]['fileType'];
   fileUrl: string;
   mediafireQuickKey: string;
+  baiduNetdiskUrl: string;
+  baiduExtractionCode: string;
   sizeLabel: string;
 };
 
@@ -72,6 +74,8 @@ function makeReleaseFileRow(): ReleaseFileInput {
     fileType: 'bundle',
     fileUrl: '',
     mediafireQuickKey: '',
+    baiduNetdiskUrl: '',
+    baiduExtractionCode: '',
     sizeLabel: '',
   };
 }
@@ -159,14 +163,16 @@ export function ReleasePublishForm({ versions, versionsLoading = false, language
     filesTitle: language === 'en' ? 'Release files' : '发布文件',
     filesDescription:
       language === 'en'
-        ? 'Manage downloadable file metadata here, including public URLs and MediaFire quickkeys.'
-        : '在此管理可下载文件元数据，包括公开链接与 MediaFire quickkey。',
+        ? 'Store the primary approved download or share URL here. After purchase/redeem, users will open this primary link, with Baidu Netdisk available as an optional secondary mirror.'
+        : '请在此保存主要的官方下载或分享链接。用户购买或兑换后会打开该主链接，也可使用可选的百度网盘备用镜像。',
     addFile: language === 'en' ? 'Add file' : '添加文件',
     labelZh: language === 'en' ? 'Label (Chinese)' : '标签（中文）',
     labelEn: language === 'en' ? 'Label (English)' : '标签（英文）',
     fileType: language === 'en' ? 'File type' : '文件类型',
-    fileUrl: language === 'en' ? 'File URL' : '文件链接',
-    mediafireQuickKey: language === 'en' ? 'MediaFire quickkey' : 'MediaFire quickkey',
+    fileUrl: language === 'en' ? 'Primary release URL / share link' : '主要发布链接 / 分享链接',
+    mediafireQuickKey: language === 'en' ? 'MediaFire quickkey (optional metadata)' : 'MediaFire quickkey（可选元数据）',
+    baiduNetdiskUrl: language === 'en' ? 'Baidu Netdisk URL (optional)' : '百度网盘链接（可选）',
+    baiduExtractionCode: language === 'en' ? 'Baidu extraction code (optional)' : '百度网盘提取码（可选）',
     sizeLabel: language === 'en' ? 'Size label' : '大小标签',
     rules: language === 'en' ? 'Rules' : '规则',
     cards: language === 'en' ? 'Cards' : '卡牌',
@@ -177,11 +183,11 @@ export function ReleasePublishForm({ versions, versionsLoading = false, language
     saving: language === 'en' ? 'Saving…' : '保存中…',
     publish: language === 'en' ? 'Publish release' : '发布版本',
     save: language === 'en' ? 'Save changes' : '保存更改',
-    mediafireNoteTitle: language === 'en' ? 'MediaFire workflow' : 'MediaFire 工作流',
+    mediafireNoteTitle: language === 'en' ? 'Download hosting workflow' : '下载托管工作流',
     mediafireNoteBody:
       language === 'en'
-        ? 'Large release files are no longer uploaded to Supabase from this page. Upload them to MediaFire separately, then manage any download rows or quickkeys outside this form.'
-        : '此页面不再将大型发布文件上传到 Supabase。请先单独上传到 MediaFire，再在此表单之外维护下载记录或 quickkey。',
+        ? 'Upload large release files to MediaFire, Baidu Netdisk, or another host first. The primary URL is exposed only after the user is entitled; Baidu Netdisk can be added as a secondary mirror with an optional extraction code.'
+        : '请先将大型发布文件上传到 MediaFire、百度网盘或其他托管服务。主链接只会在用户获得下载权限后展示；百度网盘可作为备用镜像，并可填写提取码。',
     mediafireLinkLabel: language === 'en' ? 'Open MediaFire' : '打开 MediaFire',
     stable: language === 'en' ? 'Stable' : '稳定版',
     beta: language === 'en' ? 'Beta' : '测试版',
@@ -259,7 +265,7 @@ export function ReleasePublishForm({ versions, versionsLoading = false, language
 
         const { data: fileRows, error: fileError } = await supabase
           .from('dd_version_files')
-          .select('id, label, file_type, file_url, mediafire_quickkey, size_label')
+          .select('id, label, file_type, file_url, mediafire_quickkey, baidu_netdisk_url, baidu_extraction_code, size_label')
           .eq('version_id', editVersionId)
           .order('created_at');
 
@@ -300,6 +306,8 @@ export function ReleasePublishForm({ versions, versionsLoading = false, language
                 fileType: file.file_type as ReleaseFileInput['fileType'],
                 fileUrl: String(file.file_url ?? ''),
                 mediafireQuickKey: String(file.mediafire_quickkey ?? ''),
+                baiduNetdiskUrl: String(file.baidu_netdisk_url ?? ''),
+                baiduExtractionCode: String(file.baidu_extraction_code ?? ''),
                 sizeLabel: String(file.size_label ?? ''),
               }))
             : [makeReleaseFileRow()],
@@ -370,7 +378,7 @@ export function ReleasePublishForm({ versions, versionsLoading = false, language
         en: changelogEn[index] ?? '',
       }));
 
-      const activeFiles = files.filter((file) => file.labelZh.trim() || file.labelEn.trim() || file.fileUrl.trim() || file.mediafireQuickKey.trim() || file.sizeLabel.trim());
+      const activeFiles = files.filter((file) => file.labelZh.trim() || file.labelEn.trim() || file.fileUrl.trim() || file.mediafireQuickKey.trim() || file.baiduNetdiskUrl.trim() || file.baiduExtractionCode.trim() || file.sizeLabel.trim());
 
       const payload = {
         name: form.name,
@@ -472,6 +480,8 @@ export function ReleasePublishForm({ versions, versionsLoading = false, language
             file_type: file.fileType,
             file_url: file.fileUrl.trim(),
             mediafire_quickkey: file.mediafireQuickKey.trim() || null,
+            baidu_netdisk_url: file.baiduNetdiskUrl.trim() || null,
+            baidu_extraction_code: file.baiduExtractionCode.trim() || null,
             size_label: file.sizeLabel.trim(),
           })),
         );
@@ -693,6 +703,12 @@ export function ReleasePublishForm({ versions, versionsLoading = false, language
               </Field>
               <Field label={copy.mediafireQuickKey}>
                 <input value={file.mediafireQuickKey} onChange={(e) => setFiles((current) => current.map((item) => item.id === file.id ? { ...item, mediafireQuickKey: e.target.value } : item))} className="w-full rounded-2xl border border-white/10 bg-black/30 px-4 py-3 text-sm text-white" />
+              </Field>
+              <Field label={copy.baiduNetdiskUrl}>
+                <input value={file.baiduNetdiskUrl} onChange={(e) => setFiles((current) => current.map((item) => item.id === file.id ? { ...item, baiduNetdiskUrl: e.target.value } : item))} className="w-full rounded-2xl border border-white/10 bg-black/30 px-4 py-3 text-sm text-white" />
+              </Field>
+              <Field label={copy.baiduExtractionCode}>
+                <input value={file.baiduExtractionCode} onChange={(e) => setFiles((current) => current.map((item) => item.id === file.id ? { ...item, baiduExtractionCode: e.target.value } : item))} className="w-full rounded-2xl border border-white/10 bg-black/30 px-4 py-3 text-sm text-white" />
               </Field>
             </div>
             <button type="button" onClick={() => setFiles((current) => current.length === 1 ? current : current.filter((item) => item.id !== file.id))} className="rounded-full border border-white/10 bg-black/30 px-4 py-2 text-xs font-medium text-slate-200">

@@ -1,111 +1,98 @@
-const MEDIAFIRE_API_BASE = 'https://www.mediafire.com/api/1.5';
-const MEDIAFIRE_APP_ID = import.meta.env.VITE_MEDIAFIRE_APP_ID?.trim() || '';
-const MEDIAFIRE_SESSION_TOKEN = import.meta.env.VITE_MEDIAFIRE_SESSION_TOKEN?.trim() || '';
-const MEDIAFIRE_API_KEY = import.meta.env.VITE_MEDIAFIRE_API_KEY?.trim() || '';
-const MEDIAFIRE_EMAIL = import.meta.env.VITE_MEDIAFIRE_EMAIL?.trim() || '';
-const MEDIAFIRE_PASSWORD = import.meta.env.VITE_MEDIAFIRE_PASSWORD?.trim() || '';
-
-let cachedSessionToken = MEDIAFIRE_SESSION_TOKEN;
-
-function ensureMediaFireConfigured() {
-  if (MEDIAFIRE_APP_ID && (cachedSessionToken || MEDIAFIRE_API_KEY)) {
-    return;
-  }
-
-  if (MEDIAFIRE_APP_ID && MEDIAFIRE_EMAIL && MEDIAFIRE_PASSWORD) {
-    return;
-  }
-
-  throw new Error('MediaFire credentials are not configured.');
+function trimValue(value: string | null | undefined) {
+  return value?.trim() || '';
 }
 
-async function callMediaFire(path: string, params: URLSearchParams) {
-  const response = await fetch(`${MEDIAFIRE_API_BASE}${path}?${params.toString()}`, {
+export function parseMediaFireQuickKey(value: string) {
+  const trimmedValue = trimValue(value);
+  if (!trimmedValue) {
+    return '';
+  }
+
+  try {
+    const url = new URL(trimmedValue);
+    const host = url.hostname.toLowerCase();
+    const pathSegments = url.pathname.split('/').filter(Boolean);
+
+    if ((host === 'www.mediafire.com' || host === 'mediafire.com') && pathSegments[0] === 'file' && pathSegments[1]) {
+      return pathSegments[1].trim();
+    }
+  } catch {
+    // Treat plain quickkeys as already normalized.
+  }
+
+  return trimmedValue;
+}
+
+export function isMediaFireUrl(value: string) {
+  const trimmedValue = trimValue(value);
+  if (!trimmedValue) {
+    return false;
+  }
+
+  try {
+    const url = new URL(trimmedValue);
+    const host = url.hostname.toLowerCase();
+    return host === 'www.mediafire.com' || host === 'mediafire.com';
+  } catch {
+    return false;
+  }
+}
+
+function getMediaFireShareUrl(fileUrl: string, quickKey?: string | null) {
+  const trimmedUrl = trimValue(fileUrl);
+  const normalizedQuickKey = parseMediaFireQuickKey(quickKey ?? '');
+
+  if (trimmedUrl && isMediaFireUrl(trimmedUrl)) {
+    return trimmedUrl;
+  }
+
+  if (normalizedQuickKey) {
+    return `https://www.mediafire.com/file/${encodeURIComponent(normalizedQuickKey)}/file`;
+  }
+
+  throw new Error('MediaFire share link or quickkey is missing.');
+}
+
+function extractDirectDownloadUrlFromHtml(html: string) {
+  const directDownloadMatch = html.match(/https?:\/\/download[^"'\s<>]+mediafire\.com[^"'\s<>]*/i);
+  if (directDownloadMatch?.[0]) {
+    return directDownloadMatch[0];
+  }
+
+  const buttonHrefMatch = html.match(/id=["']downloadButton["'][^>]*href=["']([^"']+)["']/i);
+  if (buttonHrefMatch?.[1]) {
+    return buttonHrefMatch[1];
+  }
+
+  const windowLocationMatch = html.match(/window\.location\.href\s*=\s*["']([^"']+)["']/i);
+  if (windowLocationMatch?.[1]) {
+    return windowLocationMatch[1];
+  }
+
+  return '';
+}
+
+export async function getMediaFireDirectDownloadUrl(input: { fileUrl?: string | null; quickKey?: string | null }) {
+  const shareUrl = getMediaFireShareUrl(input.fileUrl ?? '', input.quickKey ?? '');
+  const response = await fetch(shareUrl, {
     method: 'GET',
     cache: 'no-store',
+    redirect: 'follow',
   });
 
   if (!response.ok) {
-    throw new Error(`MediaFire request failed with status ${response.status}.`);
+    throw new Error(`MediaFire share page request failed with status ${response.status}.`);
   }
 
-  const payload = await response.json();
-  const result = payload?.response;
-
-  if (!result || result.result !== 'Success') {
-    throw new Error(result?.message ?? 'MediaFire request failed.');
+  const resolvedUrl = response.url?.trim() || '';
+  if (resolvedUrl && resolvedUrl !== shareUrl && !isMediaFireUrl(resolvedUrl)) {
+    return resolvedUrl;
   }
 
-  return result;
-}
-
-async function loginMediaFire() {
-  if (cachedSessionToken) {
-    return cachedSessionToken;
-  }
-
-  ensureMediaFireConfigured();
-
-  if (!MEDIAFIRE_APP_ID || !MEDIAFIRE_EMAIL || !MEDIAFIRE_PASSWORD) {
-    throw new Error('MediaFire login credentials are not configured.');
-  }
-
-  const params = new URLSearchParams({
-    response_format: 'json',
-    application_id: MEDIAFIRE_APP_ID,
-    email: MEDIAFIRE_EMAIL,
-    password: MEDIAFIRE_PASSWORD,
-    signature_version: '1',
-  });
-
-  const result = await callMediaFire('/user/get_session_token.php', params);
-  const token = result.session_token as string | undefined;
-
-  if (!token) {
-    throw new Error('MediaFire did not return a session token.');
-  }
-
-  cachedSessionToken = token;
-  return token;
-}
-
-async function getMediaFireSessionToken() {
-  ensureMediaFireConfigured();
-
-  if (cachedSessionToken) {
-    return cachedSessionToken;
-  }
-
-  if (MEDIAFIRE_API_KEY) {
-    return MEDIAFIRE_API_KEY;
-  }
-
-  return loginMediaFire();
-}
-
-export async function getMediaFireDirectDownloadUrl(quickKey: string) {
-  const trimmedQuickKey = quickKey.trim();
-  if (!trimmedQuickKey) {
-    throw new Error('MediaFire quickkey is missing.');
-  }
-
-  const sessionToken = await getMediaFireSessionToken();
-  const params = new URLSearchParams({
-    response_format: 'json',
-    quick_key: trimmedQuickKey,
-  });
-
-  if (cachedSessionToken) {
-    params.set('session_token', sessionToken);
-  } else {
-    params.set('api_key', sessionToken);
-  }
-
-  const result = await callMediaFire('/file/get_links.php', params);
-  const directUrl = result?.links?.[0]?.direct_download as string | undefined;
-
+  const html = await response.text();
+  const directUrl = extractDirectDownloadUrlFromHtml(html).trim();
   if (!directUrl) {
-    throw new Error('MediaFire direct download URL is unavailable.');
+    throw new Error('MediaFire direct download URL is unavailable from the share page response.');
   }
 
   return directUrl;

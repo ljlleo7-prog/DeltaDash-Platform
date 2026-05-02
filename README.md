@@ -99,6 +99,8 @@ VITE_SHARED_COOKIE_DOMAIN=.geeksproductionstudio.com
 VITE_LOGIN_ORIGIN=https://geeksproductionstudio.com
 ```
 
+MediaFire API credentials are not required in the frontend. For hosted official releases, store the approved primary download or durable share link in `dd_version_files.file_url`. Optionally add a Baidu Netdisk mirror in `baidu_netdisk_url` and its extraction code in `baidu_extraction_code`. These links are only exposed by the download UI after the user passes the purchase/redeem flow.
+
 If these are missing:
 
 - public Supabase-backed content will render as empty states
@@ -160,6 +162,12 @@ The schema also expects the following storage buckets:
 
 Row-level security is enabled across the MVP tables. Official release writes are protected by the `dd_is_release_admin()` helper and related policies.
 
+### Official download delivery
+
+Official release downloads keep the protected purchase/redeem gate in Supabase. After entitlement succeeds, the browser opens the approved primary link stored in `dd_version_files.file_url`. Admins can also provide optional Baidu Netdisk mirror metadata through `dd_version_files.baidu_netdisk_url` and `dd_version_files.baidu_extraction_code`; the downloader UI shows that secondary option only after the same entitlement check succeeds.
+
+The previous `resolve-release-download` Supabase Edge Function source remains in `supabase/functions/resolve-release-download/index.ts` for possible future resolver work, but the default download flow no longer depends on server-side MediaFire direct-link scraping.
+
 ## Official release publishing
 
 The admin publishing UI lives at `/versions/publish`.
@@ -170,10 +178,11 @@ That flow:
 - creates official version rows in `dd_version_list`
 - optionally creates parent-child links in `dd_branch_map`
 - writes explicit transition pricing into `dd_version_transition_prices`
-- uploads files to the `dd-official-releases` bucket
 - stores published file metadata in `dd_version_files`
-
-## Deployment notes
+- stores durable primary release file links in `dd_version_files.file_url`
+- optionally stores MediaFire quickkeys in `dd_version_files.mediafire_quickkey` for metadata/future resolver workflows
+- optionally stores Baidu Netdisk mirrors in `dd_version_files.baidu_netdisk_url` plus `dd_version_files.baidu_extraction_code`
+- exposes primary and optional mirror links only after the purchase/redeem flow succeeds
 
 This app is intended to be published at:
 

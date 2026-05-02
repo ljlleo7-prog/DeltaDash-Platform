@@ -52,6 +52,12 @@ export function AppShell({ children }: { children: ReactNode }) {
       </nav>
 
       <main className="dd-main-panel">{children}</main>
+
+      <footer className="dd-main-panel mt-0 border-t border-white/10 py-4 text-center text-xs text-slate-500">
+        <NavLink to="/terms" className="hover:text-slate-300">
+          {language === 'en' ? 'Terms of Use & License' : '使用条款与许可声明'}
+        </NavLink>
+      </footer>
     </div>
   );
 }

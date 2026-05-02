@@ -11,10 +11,14 @@ export const supabaseUrl = url ?? '';
 export const supabaseAnonKey = anonKey ?? '';
 
 type ProfileWithAuthority = {
+  username?: string | null;
   display_name?: string | null;
-  token_balance?: number | null;
   tester_programs?: string[] | null;
   developer_status?: string | null;
+};
+
+type WalletWithBalance = {
+  token_balance?: number | null;
 };
 
 export type ProfileAuthority = {
@@ -89,6 +93,11 @@ export function isReleaseAdminProfile(profile: ProfileWithAuthority | null | und
 }
 
 export function resolveSharedUserDisplayName(user: User | null, profile: ProfileWithAuthority | null | undefined) {
+  const profileUsername = profile?.username?.trim();
+  if (profileUsername) {
+    return profileUsername;
+  }
+
   const profileDisplayName = profile?.display_name?.trim();
   if (profileDisplayName) {
     return profileDisplayName;
@@ -111,10 +120,25 @@ export function resolveSharedUserDisplayName(user: User | null, profile: Profile
   return null;
 }
 
-export function resolveSharedTokenBalance(profile: ProfileWithAuthority | null | undefined) {
-  return typeof profile?.token_balance === 'number' && Number.isFinite(profile.token_balance)
-    ? profile.token_balance
+export function resolveSharedTokenBalance(wallet: WalletWithBalance | null | undefined) {
+  return typeof wallet?.token_balance === 'number' && Number.isFinite(wallet.token_balance)
+    ? wallet.token_balance
     : null;
+}
+
+export async function getSharedWallet(userId: string): Promise<WalletWithBalance | null> {
+  const supabase = getSupabaseClient();
+  if (!supabase) {
+    return null;
+  }
+
+  const { data } = await supabase
+    .from('wallets')
+    .select('token_balance')
+    .eq('user_id', userId)
+    .maybeSingle();
+
+  return data as WalletWithBalance | null;
 }
 
 export function getSupabaseClient() {

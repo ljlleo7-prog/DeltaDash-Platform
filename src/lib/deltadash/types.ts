@@ -1,3 +1,5 @@
+import type { DeltaDashCardInstance } from './card-types';
+
 export type DeltaDashPhase = 'planning' | 'resolving' | 'steward' | 'roundEnd' | 'finished';
 
 export type DeltaDashActionType = 'steady' | 'push' | 'defend' | 'recover';
@@ -26,6 +28,7 @@ export interface DeltaDashPlayer {
 export interface DeltaDashCar {
   id: string;
   playerId: string;
+  driverId: string;
   name: string;
   progress: number;
   energy: number;
@@ -39,6 +42,8 @@ export interface DeltaDashCar {
 export interface DeltaDashActionCommitment {
   carId: string;
   action: DeltaDashActionType;
+  cardDefinitionId?: string;
+  cardInstanceId?: string;
 }
 
 export interface DeltaDashStewardNote {
@@ -58,6 +63,7 @@ export interface DeltaDashMatchState {
   flag: DeltaDashFlag;
   players: DeltaDashPlayer[];
   cars: DeltaDashCar[];
+  cards: DeltaDashCardInstance[];
   commitments: DeltaDashActionCommitment[];
   stewardNotes: DeltaDashStewardNote[];
   finishedAtRound: number | null;
@@ -77,6 +83,27 @@ export type DeltaDashEvent =
       round: number;
       carId: string;
       action: DeltaDashActionType;
+    }
+  | {
+      type: 'CARD_PLAY_COMMITTED';
+      round: number;
+      carId: string;
+      cardInstanceId: string;
+      cardDefinitionId: string;
+      action: DeltaDashActionType;
+    }
+  | {
+      type: 'CARD_MOVED';
+      round: number;
+      cardInstanceId: string;
+      zone: DeltaDashCardInstance['zone'];
+      revealed: boolean;
+    }
+  | {
+      type: 'CARD_RESOLVED';
+      round: number;
+      carId: string;
+      cardDefinitionId: string;
     }
   | {
       type: 'COMMITMENTS_LOCKED';
@@ -105,6 +132,7 @@ export type DeltaDashEvent =
 export interface DeltaDashResolvedAction {
   carId: string;
   action: DeltaDashActionType;
+  cardDefinitionId?: string;
   progressDelta: number;
   energyDelta: number;
   tireDelta: number;

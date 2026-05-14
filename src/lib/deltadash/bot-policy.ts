@@ -1,3 +1,4 @@
+import { playableCardCatalog } from './playable-card-catalog';
 import type { DeltaDashActionType, DeltaDashCar, DeltaDashMatchState } from './types';
 
 export function chooseBotAction(state: DeltaDashMatchState, car: DeltaDashCar): DeltaDashActionType {
@@ -13,4 +14,9 @@ export function chooseBotAction(state: DeltaDashMatchState, car: DeltaDashCar): 
   if (car.progress >= leaderProgress) return 'steady';
 
   return 'steady';
+}
+
+export function chooseBotCardId(state: DeltaDashMatchState, car: DeltaDashCar): string {
+  const action = chooseBotAction(state, car);
+  return playableCardCatalog.find((card) => card.actionBridge === action)?.id ?? 'prototype.steady';
 }

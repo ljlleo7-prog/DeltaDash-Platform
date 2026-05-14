@@ -1,38 +1,20 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
+import { AssetGallery } from '@/components/deltadash/asset-gallery';
+import { CardHandPanel } from '@/components/deltadash/card-hand-panel';
+import { ClassificationList } from '@/components/deltadash/classification-list';
+import { EventLogPanel } from '@/components/deltadash/event-log-panel';
+import { RaceStatusGrid } from '@/components/deltadash/race-status-grid';
+import { StewardPanel } from '@/components/deltadash/steward-panel';
 import { useLanguage } from '@/components/language-provider';
 import { LocalizedSectionHeader } from '@/components/localized-section-header';
-import { chooseBotAction } from '@/lib/deltadash/bot-policy';
-import { resolveAction, projectDeltaDashEvents } from '@/lib/deltadash/reducer';
+import { advanceLocalMatch } from '@/lib/deltadash/match-flow';
+import { projectDeltaDashEvents } from '@/lib/deltadash/reducer';
 import { createInitialMatchEvent } from '@/lib/deltadash/setup';
-import { getCommitment, getFinishSummary, getHumanCar, getMissingCommitmentCarIds, getRankedCars, isMatchFinished } from '@/lib/deltadash/selectors';
+import { getHumanCar, getRankedCars } from '@/lib/deltadash/selectors';
 import { loadStoredDeltaDashEvents, resetStoredDeltaDashEvents, saveStoredDeltaDashEvents } from '@/lib/deltadash/storage';
-import { runStewardReview } from '@/lib/deltadash/steward-policy';
-import type { DeltaDashActionType, DeltaDashEvent } from '@/lib/deltadash/types';
-
-const actionCopy: Record<DeltaDashActionType, { zh: string; en: string; description: { zh: string; en: string } }> = {
-  steady: {
-    zh: '稳定推进',
-    en: 'Steady',
-    description: { zh: '+3 进度，+1 电量，-1 轮胎。黄旗/限速下 +2。', en: '+3 progress, +1 energy, -1 tire. +2 under yellow/speed cap.' },
-  },
-  push: {
-    zh: '强推',
-    en: 'Push',
-    description: { zh: '+5 进度，-2 电量，-2 轮胎，增加事故风险。', en: '+5 progress, -2 energy, -2 tire, higher incident risk.' },
-  },
-  defend: {
-    zh: '防守',
-    en: 'Defend',
-    description: { zh: '+2 进度，保守通过本回合。', en: '+2 progress with safer race posture.' },
-  },
-  recover: {
-    zh: '回收',
-    en: 'Recover',
-    description: { zh: '+1 进度，+2 电量，+1 轮胎。', en: '+1 progress, +2 energy, +1 tire.' },
-  },
-};
+import type { DeltaDashEvent } from '@/lib/deltadash/types';
 
 export function DeltadashPrototypePage() {
   const { language } = useLanguage();
@@ -47,10 +29,6 @@ export function DeltadashPrototypePage() {
     if (events.length) saveStoredDeltaDashEvents(events);
   }, [events]);
 
-  function appendEvents(nextEvents: DeltaDashEvent[]) {
-    setEvents((currentEvents) => [...currentEvents, ...nextEvents]);
-  }
-
   function startNewMatch() {
     const nextEvents = [createInitialMatchEvent()];
     setEvents(nextEvents);
@@ -62,72 +40,10 @@ export function DeltadashPrototypePage() {
     setEvents([]);
   }
 
-  function commitHumanAction(action: DeltaDashActionType) {
-    if (!state || state.phase === 'finished') return;
-
-    const humanCar = getHumanCar(state);
-    if (!humanCar || humanCar.retired) return;
-
-    const humanEvent: DeltaDashEvent = {
-      type: 'ACTION_COMMITTED',
-      round: state.round,
-      carId: humanCar.id,
-      action,
-    };
-
-    const stateAfterHuman = projectDeltaDashEvents([...events, humanEvent]);
-    if (!stateAfterHuman) return;
-
-    const botEvents: DeltaDashEvent[] = stateAfterHuman.players
-      .filter((player) => player.kind === 'bot')
-      .flatMap((player) => {
-        const car = stateAfterHuman.cars.find((candidate) => candidate.id === player.carId);
-        if (!car || car.retired) return [];
-
-        return [{
-          type: 'ACTION_COMMITTED' as const,
-          round: stateAfterHuman.round,
-          carId: car.id,
-          action: chooseBotAction(stateAfterHuman, car),
-        }];
-      });
-
-    const committedState = projectDeltaDashEvents([...events, humanEvent, ...botEvents]);
-    if (!committedState || getMissingCommitmentCarIds(committedState).length) {
-      appendEvents([humanEvent, ...botEvents]);
-      return;
-    }
-
-    const yellowFlag = committedState.flag === 'yellow';
-    const results = committedState.commitments.map((commitment) => {
-      const car = committedState.cars.find((candidate) => candidate.id === commitment.carId);
-      return car ? resolveAction(car, commitment.action, yellowFlag) : null;
-    }).filter((result): result is NonNullable<typeof result> => Boolean(result));
-
-    const lockedEvent: DeltaDashEvent = { type: 'COMMITMENTS_LOCKED', round: committedState.round };
-    const resolvedEvent: DeltaDashEvent = { type: 'ACTIONS_RESOLVED', round: committedState.round, results };
-    const resolvedState = projectDeltaDashEvents([...events, humanEvent, ...botEvents, lockedEvent, resolvedEvent]);
-    if (!resolvedState) return;
-
-    const review = runStewardReview(resolvedState);
-    const reviewedEvent: DeltaDashEvent = {
-      type: 'STEWARD_REVIEWED',
-      round: resolvedState.round,
-      notes: review.notes,
-      flag: review.flag,
-    };
-    const reviewedState = projectDeltaDashEvents([...events, humanEvent, ...botEvents, lockedEvent, resolvedEvent, reviewedEvent]);
-    if (!reviewedState) return;
-
-    const roundEndEvent: DeltaDashEvent = { type: 'ROUND_ENDED', round: reviewedState.round };
-    const nextState = projectDeltaDashEvents([...events, humanEvent, ...botEvents, lockedEvent, resolvedEvent, reviewedEvent, roundEndEvent]);
-    if (!nextState) return;
-
-    const finishingEvents: DeltaDashEvent[] = isMatchFinished(nextState)
-      ? [{ type: 'MATCH_FINISHED', round: nextState.round }]
-      : [{ type: 'ROUND_STARTED', round: nextState.round + 1 }];
-
-    appendEvents([humanEvent, ...botEvents, lockedEvent, resolvedEvent, reviewedEvent, roundEndEvent, ...finishingEvents]);
+  function commitHumanCard(cardDefinitionId: string) {
+    const nextEvents = advanceLocalMatch(events, cardDefinitionId);
+    if (!nextEvents.length) return;
+    setEvents((currentEvents) => [...currentEvents, ...nextEvents]);
   }
 
   const rankedCars = state ? getRankedCars(state) : [];
@@ -172,126 +88,18 @@ export function DeltadashPrototypePage() {
         </section>
       ) : (
         <>
-          <section className="grid gap-4 lg:grid-cols-4">
-            <StatusCard label={language === 'en' ? 'Round' : '回合'} value={String(state.round)} />
-            <StatusCard label={language === 'en' ? 'Phase' : '阶段'} value={state.phase} />
-            <StatusCard label={language === 'en' ? 'Flag' : '旗况'} value={state.flag.toUpperCase()} />
-            <StatusCard label={language === 'en' ? 'Finish' : '终点'} value={`${state.track.finishProgress}`} />
-          </section>
-
+          <RaceStatusGrid state={state} language={language} />
           <section className="grid gap-6 xl:grid-cols-[1.4fr_0.9fr]">
-            <div className="rounded-3xl border border-white/10 bg-white/5 p-5">
-              <div className="flex flex-wrap items-center justify-between gap-3">
-                <h2 className="text-xl font-semibold text-white">{language === 'en' ? 'Classification' : '比赛排名'}</h2>
-                <button type="button" onClick={resetMatch} className="rounded-full border border-red-300/30 bg-red-500/10 px-4 py-2 text-xs font-medium text-red-100 transition hover:bg-red-500/20">
-                  {language === 'en' ? 'Reset prototype' : '重置原型'}
-                </button>
-              </div>
-
-              <div className="mt-5 space-y-3">
-                {rankedCars.map((car) => {
-                  const owner = state.players.find((player) => player.carId === car.id);
-                  const commitment = getCommitment(state, car.id);
-                  const progressPercent = Math.min(100, (car.progress / state.track.finishProgress) * 100);
-
-                  return (
-                    <article key={car.id} className="rounded-2xl border border-white/10 bg-black/20 p-4">
-                      <div className="flex flex-wrap items-center justify-between gap-3">
-                        <div>
-                          <p className="text-sm font-semibold text-white">#{car.rank} {car.name}</p>
-                          <p className="text-xs text-slate-500">{owner?.kind === 'human' ? (language === 'en' ? 'Human' : '玩家') : (language === 'en' ? 'Bot' : '机器人')}</p>
-                        </div>
-                        <div className="text-right text-xs text-slate-300">
-                          <p>{language === 'en' ? 'Energy' : '电量'} {car.energy}/6 · {language === 'en' ? 'Tire' : '轮胎'} {car.tire}/6</p>
-                          <p>{language === 'en' ? 'Last' : '上回合'}: {car.lastAction ?? '-'}</p>
-                        </div>
-                      </div>
-                      <div className="mt-4 h-2 overflow-hidden rounded-full bg-white/10">
-                        <div className="h-full rounded-full bg-[linear-gradient(90deg,var(--accent-cold),var(--accent-hot))]" style={{ width: `${progressPercent}%` }} />
-                      </div>
-                      <div className="mt-3 flex flex-wrap gap-2 text-xs text-slate-400">
-                        <span>{language === 'en' ? 'Progress' : '进度'} {car.progress}/{state.track.finishProgress}</span>
-                        <span>{language === 'en' ? 'Committed' : '已提交'}: {commitment?.action ?? '-'}</span>
-                        {car.penalties.map((penalty) => <span key={penalty} className="rounded-full border border-yellow-300/20 bg-yellow-500/10 px-2 py-1 text-yellow-100">{penalty}</span>)}
-                      </div>
-                    </article>
-                  );
-                })}
-              </div>
-            </div>
-
+            <ClassificationList state={state} rankedCars={rankedCars} language={language} onReset={resetMatch} />
             <div className="space-y-6">
-              <section className="rounded-3xl border border-white/10 bg-white/5 p-5">
-                <h2 className="text-xl font-semibold text-white">{language === 'en' ? 'Your action' : '你的行动'}</h2>
-                {state.phase === 'finished' ? (
-                  <p className="mt-3 text-sm leading-6 text-slate-300">{getFinishSummary(state)}</p>
-                ) : humanCar?.retired ? (
-                  <p className="mt-3 text-sm leading-6 text-red-100">{language === 'en' ? 'Your car has retired.' : '你的赛车已经退赛。'}</p>
-                ) : (
-                  <div className="mt-4 grid gap-3">
-                    {(Object.keys(actionCopy) as DeltaDashActionType[]).map((action) => (
-                      <button key={action} type="button" onClick={() => commitHumanAction(action)} className="rounded-2xl border border-white/10 bg-black/25 p-4 text-left transition hover:border-[var(--accent-cold)]/45 hover:bg-black/35">
-                        <p className="text-sm font-semibold text-white">{actionCopy[action][language]}</p>
-                        <p className="mt-2 text-xs leading-5 text-slate-400">{actionCopy[action].description[language]}</p>
-                      </button>
-                    ))}
-                  </div>
-                )}
-              </section>
-
-              <section className="rounded-3xl border border-white/10 bg-white/5 p-5">
-                <h2 className="text-xl font-semibold text-white">{language === 'en' ? 'Steward' : '赛会干事'}</h2>
-                <p className="mt-3 text-sm leading-6 text-slate-300">{latestStewardNote?.message ?? (language === 'en' ? 'No steward review yet.' : '暂无赛会判定。')}</p>
-              </section>
-
-              <section className="rounded-3xl border border-white/10 bg-white/5 p-5">
-                <h2 className="text-xl font-semibold text-white">{language === 'en' ? 'Recent event log' : '近期事件日志'}</h2>
-                <div className="mt-4 space-y-2 text-xs text-slate-400">
-                  {recentEvents.map((event, index) => (
-                    <p key={`${event.type}-${index}`} className="rounded-xl border border-white/10 bg-black/20 px-3 py-2">
-                      {describeEvent(event)}
-                    </p>
-                  ))}
-                </div>
-              </section>
+              <CardHandPanel state={state} humanCar={humanCar} language={language} onCard={commitHumanCard} />
+              <StewardPanel latestNote={latestStewardNote} language={language} />
+              <EventLogPanel events={recentEvents} language={language} />
             </div>
           </section>
+          <AssetGallery language={language} />
         </>
       )}
     </div>
   );
-}
-
-function StatusCard({ label, value }: { label: string; value: string }) {
-  return (
-    <article className="rounded-3xl border border-white/10 bg-white/5 p-5">
-      <p className="text-xs uppercase tracking-[0.28em] text-slate-500">{label}</p>
-      <p className="mt-3 text-2xl font-semibold text-white">{value}</p>
-    </article>
-  );
-}
-
-function describeEvent(event: DeltaDashEvent) {
-  switch (event.type) {
-    case 'MATCH_CREATED':
-      return 'MATCH_CREATED · local event log initialized';
-    case 'ACTION_COMMITTED':
-      return `ACTION_COMMITTED · ${event.carId} chose ${event.action}`;
-    case 'ACTIONS_RESOLVED':
-      return `ACTIONS_RESOLVED · ${event.results.length} cars updated`;
-    case 'STEWARD_REVIEWED':
-      return `STEWARD_REVIEWED · ${event.notes.length} note(s), flag ${event.flag}`;
-    case 'ROUND_STARTED':
-      return `ROUND_STARTED · round ${event.round}`;
-    case 'ROUND_ENDED':
-      return `ROUND_ENDED · round ${event.round}`;
-    case 'MATCH_FINISHED':
-      return `MATCH_FINISHED · round ${event.round}`;
-    case 'COMMITMENTS_LOCKED':
-      return `COMMITMENTS_LOCKED · round ${event.round}`;
-    default: {
-      const exhaustive: never = event;
-      return exhaustive;
-    }
-  }
 }

@@ -47,10 +47,17 @@ export function AuthStatusPanel({ language }: { language: Language }) {
 
   useEffect(() => {
     const supabase = getSupabaseClient();
+    let active = true;
+    let requestId = 0;
 
     async function loadProfile() {
+      const currentRequestId = requestId + 1;
+      requestId = currentRequestId;
       const { user, profile } = await getSharedSessionProfile();
       const wallet = user ? await getSharedWallet(user.id) : null;
+
+      if (!active || currentRequestId !== requestId) return;
+
       setState({
         user,
         profile: profile as AuthProfile | null,
@@ -63,7 +70,9 @@ export function AuthStatusPanel({ language }: { language: Language }) {
     void loadProfile();
 
     if (!supabase) {
-      return;
+      return () => {
+        active = false;
+      };
     }
 
     const { data } = supabase.auth.onAuthStateChange(() => {
@@ -71,6 +80,7 @@ export function AuthStatusPanel({ language }: { language: Language }) {
     });
 
     return () => {
+      active = false;
       data.subscription.unsubscribe();
     };
   }, []);

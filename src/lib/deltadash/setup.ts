@@ -1,3 +1,5 @@
+import { createPrototypeCardInstances } from './card-setup';
+import { prototypeDrivers } from './driver-catalog';
 import type { DeltaDashEvent, DeltaDashMatchState, DeltaDashTrack } from './types';
 
 const DEMO_TRACK: DeltaDashTrack = {
@@ -9,6 +11,20 @@ const DEMO_TRACK: DeltaDashTrack = {
 };
 
 export function createInitialMatchEvent(): DeltaDashEvent {
+  const players = prototypeDrivers.map((driver, index) => {
+    const isHuman = index === 0;
+    return {
+      id: isHuman ? 'player-human' : `player-bot-${index}`,
+      name: isHuman ? 'You' : `Bot ${driver.name}`,
+      kind: isHuman ? 'human' as const : 'bot' as const,
+      carId: isHuman ? 'car-human' : `car-bot-${index}`,
+    };
+  });
+  const cars = prototypeDrivers.map((driver, index) => {
+    const isHuman = index === 0;
+    return createCar(isHuman ? 'car-human' : `car-bot-${index}`, isHuman ? 'player-human' : `player-bot-${index}`, driver.id, driver.carName);
+  });
+
   const match: DeltaDashMatchState = {
     id: `local-${Date.now()}`,
     seed: 2026,
@@ -16,18 +32,9 @@ export function createInitialMatchEvent(): DeltaDashEvent {
     phase: 'planning',
     track: DEMO_TRACK,
     flag: 'green',
-    players: [
-      { id: 'player-human', name: 'You', kind: 'human', carId: 'car-human' },
-      { id: 'player-bot-1', name: 'Bot Senna', kind: 'bot', carId: 'car-bot-1' },
-      { id: 'player-bot-2', name: 'Bot Vega', kind: 'bot', carId: 'car-bot-2' },
-      { id: 'player-bot-3', name: 'Bot Nova', kind: 'bot', carId: 'car-bot-3' },
-    ],
-    cars: [
-      createCar('car-human', 'player-human', 'Delta One'),
-      createCar('car-bot-1', 'player-bot-1', 'Redline Ghost'),
-      createCar('car-bot-2', 'player-bot-2', 'Azure Spark'),
-      createCar('car-bot-3', 'player-bot-3', 'Night Runner'),
-    ],
+    players,
+    cars,
+    cards: createPrototypeCardInstances(cars),
     commitments: [],
     stewardNotes: [],
     finishedAtRound: null,
@@ -36,10 +43,11 @@ export function createInitialMatchEvent(): DeltaDashEvent {
   return { type: 'MATCH_CREATED', match };
 }
 
-function createCar(id: string, playerId: string, name: string) {
+function createCar(id: string, playerId: string, driverId: string, name: string) {
   return {
     id,
     playerId,
+    driverId,
     name,
     progress: 0,
     energy: 3,

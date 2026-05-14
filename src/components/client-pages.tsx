@@ -15,6 +15,8 @@ import { getSharedSessionProfile } from '@/lib/supabase';
 import { localize, statusLabel } from '@/lib/i18n';
 import type { Dlc, Fork, Mod, RuleSection, Version } from '@/lib/types';
 import { ReleasePublishForm } from '@/components/release-publish-form';
+import { RulesDisclaimer } from '@/components/rules/rules-disclaimer';
+import { RulesInterpretationMap } from '@/components/rules/rules-interpretation-map';
 import { VersionTree } from '@/components/version-tree';
 import { DlcPublishForm } from '@/components/dlc-publish-form';
 
@@ -586,8 +588,22 @@ export function RulesClientPage() {
         }}
       />
 
-      {loading ? <LoadingBlock message={language === 'en' ? 'Loading rule sections…' : '正在加载规则章节…'} /> : null}
-      {error ? <ErrorBlock message={language === 'en' ? 'Failed to load rules.' : '加载规则失败。'} /> : null}
+      <RulesDisclaimer language={language} />
+      <RulesInterpretationMap language={language} />
+
+      <section className="space-y-3">
+        <div>
+          <p className="text-xs font-semibold uppercase tracking-[0.3em] text-[var(--accent-hot)]">
+            {language === 'en' ? 'Published rule sections' : '已发布规则章节'}
+          </p>
+          <h2 className="mt-2 text-2xl font-semibold text-white">
+            {language === 'en' ? 'Developer-reviewed structured rules' : '开发者审核的结构化规则'}
+          </h2>
+        </div>
+
+        {loading ? <LoadingBlock message={language === 'en' ? 'Loading rule sections…' : '正在加载规则章节…'} /> : null}
+        {error ? <ErrorBlock message={language === 'en' ? 'Failed to load rules.' : '加载规则失败。'} /> : null}
+      </section>
 
       {!loading && !error && rules.length ? (
         <section className="space-y-4">

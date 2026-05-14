@@ -19,6 +19,12 @@ export function applyDeltaDashEvent(state: DeltaDashMatchState | null, event: De
       return state ? { ...state, round: event.round, phase: 'planning', commitments: [] } : state;
     case 'ACTION_COMMITTED':
       return state ? commitAction(state, event.carId, event.action) : state;
+    case 'CARD_PLAY_COMMITTED':
+      return state ? commitAction(state, event.carId, event.action, event.cardDefinitionId, event.cardInstanceId) : state;
+    case 'CARD_MOVED':
+      return state ? moveCard(state, event.cardInstanceId, event.zone, event.revealed) : state;
+    case 'CARD_RESOLVED':
+      return state;
     case 'COMMITMENTS_LOCKED':
       return state ? { ...state, phase: 'resolving' } : state;
     case 'ACTIONS_RESOLVED':
@@ -66,9 +72,16 @@ export function resolveAction(car: DeltaDashCar, action: DeltaDashActionType, ye
   }
 }
 
-function commitAction(state: DeltaDashMatchState, carId: string, action: DeltaDashActionType): DeltaDashMatchState {
+function commitAction(state: DeltaDashMatchState, carId: string, action: DeltaDashActionType, cardDefinitionId?: string, cardInstanceId?: string): DeltaDashMatchState {
   const commitments = state.commitments.filter((commitment) => commitment.carId !== carId);
-  return { ...state, commitments: [...commitments, { carId, action }] };
+  return { ...state, commitments: [...commitments, { carId, action, cardDefinitionId, cardInstanceId }] };
+}
+
+function moveCard(state: DeltaDashMatchState, cardInstanceId: string, zone: DeltaDashMatchState['cards'][number]['zone'], revealed: boolean): DeltaDashMatchState {
+  return {
+    ...state,
+    cards: state.cards.map((card) => (card.instanceId === cardInstanceId ? { ...card, zone, revealed } : card)),
+  };
 }
 
 function resolveActions(state: DeltaDashMatchState, results: DeltaDashResolvedAction[]): DeltaDashMatchState {

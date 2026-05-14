@@ -1,4 +1,5 @@
-import type { DeltaDashActionCommitment, DeltaDashMatchState, DeltaDashRankedCar } from './types';
+import { getPrototypeDriver, type DeltaDashDriverDefinition } from './driver-catalog';
+import type { DeltaDashActionCommitment, DeltaDashCar, DeltaDashMatchState, DeltaDashRankedCar } from './types';
 
 export function getRankedCars(state: DeltaDashMatchState): DeltaDashRankedCar[] {
   return [...state.cars]
@@ -18,6 +19,19 @@ export function getLeader(state: DeltaDashMatchState): DeltaDashRankedCar | null
 export function getHumanCar(state: DeltaDashMatchState) {
   const humanPlayer = state.players.find((player) => player.kind === 'human');
   return humanPlayer ? state.cars.find((car) => car.id === humanPlayer.carId) ?? null : null;
+}
+
+export function getDriverForCar(car: DeltaDashCar): DeltaDashDriverDefinition | null {
+  return getPrototypeDriver(car.driverId);
+}
+
+export function getCarPresentation(car: DeltaDashCar): { name: string; imageUrl: string | null; driver: DeltaDashDriverDefinition | null } {
+  const driver = getDriverForCar(car);
+  return {
+    name: driver?.carName ?? car.name,
+    imageUrl: driver?.imageUrl ?? null,
+    driver,
+  };
 }
 
 export function getCommitment(state: DeltaDashMatchState, carId: string): DeltaDashActionCommitment | null {

@@ -1,6 +1,6 @@
 import { toLocalizedList, toLocalizedText } from '@/lib/i18n';
 import { getSupabaseClient, getSharedSessionProfile, isSupabaseConfigured, resolveSharedUserDisplayName } from '@/lib/supabase';
-import type { Dlc, DlcFile, Fork, FundPool, Mod, RatingSummary, ReleaseFileDeliveryMode, RuleSection, Thread, ThreadDetail, ThreadReply, Version } from '@/lib/types';
+import type { Dlc, DlcFile, Fork, Mod, RatingSummary, ReleaseFileDeliveryMode, RuleSection, Thread, ThreadDetail, ThreadReply, Version } from '@/lib/types';
 
 type VersionRow = {
   id: string;

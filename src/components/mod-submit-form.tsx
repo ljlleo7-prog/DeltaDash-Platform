@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { getOfficialLoginUrl, getSharedSessionProfile } from '@/lib/supabase';
-import { submitMod, getDlcs } from '@/lib/platform-data';
+import { submitMod } from '@/lib/platform-data';
 import type { Language } from '@/lib/i18n';
 import type { Version } from '@/lib/types';
 
@@ -102,6 +102,11 @@ export function ModSubmitForm({ versions, language }: { versions: Version[]; lan
         </Field>
         <Field label={language === 'en' ? 'Token price (0 = free)' : '代币价格（0 = 免费）'}>
           <input type="number" min="0" max="100" step="1" value={form.tokenPrice} onChange={(e) => setForm({ ...form, tokenPrice: e.target.value })} className="w-full rounded-2xl border border-white/10 bg-black/30 px-4 py-3 text-sm text-white" />
+          <p className="mt-1 text-xs text-slate-500">
+            {language === 'en'
+              ? 'Higher price reduces contribution award eligibility. Free mods receive 100% of any award; price 50 → ~67%; price 100 → 50%.'
+              : '价格越高，贡献奖励越少。免费模组可获全额奖励；价格 50 → 约 67%；价格 100 → 50%。'}
+          </p>
         </Field>
       </div>
 

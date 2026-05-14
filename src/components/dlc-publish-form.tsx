@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react';
 import { getOfficialLoginUrl, getSharedSessionProfile, getSupabaseClient, isSupabaseConfigured } from '@/lib/supabase';
 import { getVersions } from '@/lib/platform-data';
-import { toLocalizedText as normalizeLocalizedText, type Language, type LocalizedText } from '@/lib/i18n';
+import { type Language, type LocalizedText } from '@/lib/i18n';
 import type { Version } from '@/lib/types';
 
 type DlcFileInput = {

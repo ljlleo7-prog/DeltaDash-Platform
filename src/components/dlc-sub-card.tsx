@@ -54,7 +54,7 @@ export function DlcSubCard({ dlc, language }: { dlc: Dlc; language: Language }) 
         <p className="text-xs text-slate-500">{language === 'en' ? `${dlc.soldCount} sold` : `已售 ${dlc.soldCount}`}</p>
       ) : null}
 
-      <RatingWidget targetType="dlc" targetId={dlc.id} summary={dlc.rating} language={language} interactive={!dlc.isLicensed} />
+      <RatingWidget targetType="dlc" targetId={dlc.id} summary={dlc.rating} language={language} interactive />
 
       {fileUrl ? (
         <a href={fileUrl} target="_blank" rel="noreferrer" className="inline-flex rounded-full border border-cyan-300/30 bg-black/20 px-4 py-1.5 text-xs font-medium text-cyan-100 transition hover:bg-black/30">

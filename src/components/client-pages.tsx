@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { EmptyState } from '@/components/empty-state';
 import { useLanguage } from '@/components/language-provider';
@@ -10,12 +10,13 @@ import { DlcSubCard } from '@/components/dlc-sub-card';
 import { ModSubmitForm } from '@/components/mod-submit-form';
 import { RatingWidget } from '@/components/rating-widget';
 import { redeemReleaseDownload } from '@/lib/downloads';
-import { getDlcs, getForks, getFundPoolBalance, getMods, getRuleSections, getVersions } from '@/lib/platform-data';
+import { getDlcs, getForks, getMods, getRuleSections, getVersions } from '@/lib/platform-data';
 import { getSharedSessionProfile } from '@/lib/supabase';
 import { localize, statusLabel } from '@/lib/i18n';
 import type { Dlc, Fork, Mod, RuleSection, Version } from '@/lib/types';
 import { ReleasePublishForm } from '@/components/release-publish-form';
 import { VersionTree } from '@/components/version-tree';
+import { DlcPublishForm } from '@/components/dlc-publish-form';
 
 type AsyncState<T> = {
   loading: boolean;
@@ -31,9 +32,10 @@ type DownloadOptionsState = {
 };
 
 function useClientData<T>(loader: () => Promise<T>, initialData: T): AsyncState<T> {
+  const initialRef = useRef(initialData);
   const [state, setState] = useState<AsyncState<T>>({
     loading: true,
-    data: initialData,
+    data: initialRef.current,
     error: false,
   });
 
@@ -47,13 +49,13 @@ function useClientData<T>(loader: () => Promise<T>, initialData: T): AsyncState<
       })
       .catch(() => {
         if (!active) return;
-        setState({ loading: false, data: initialData, error: true });
+        setState({ loading: false, data: initialRef.current, error: true });
       });
 
     return () => {
       active = false;
     };
-  }, [initialData, loader]);
+  }, [loader]);
 
   return state;
 }
@@ -308,7 +310,7 @@ export function DownloadClientPage() {
                 {dlcs.filter((dlc) => dlc.supportedVersionIds.includes(version.id)).map((dlc) => (
                   <DlcSubCard key={dlc.id} dlc={dlc} language={language} />
                 ))}
-                <RatingWidget targetType="version" targetId={version.id} summary={version.rating} language={language} />
+                <RatingWidget targetType="version" targetId={version.id} summary={version.rating} language={language} interactive />
               </article>
             ))}
           </section>
@@ -374,21 +376,56 @@ export function VersionsClientPage() {
         />
       ) : null}
 
-      <section className="rounded-3xl border border-white/10 bg-white/5 p-5">
+      <section className="space-y-3 rounded-3xl border border-white/10 bg-white/5 p-5">
+        <h3 className="text-xs font-semibold uppercase tracking-[0.2em] text-[var(--accent-cold)]">
+          {language === 'en' ? 'Developer tools' : '开发者工具'}
+        </h3>
         <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
           <div>
-            <h3 className="text-lg font-semibold text-white">{language === 'en' ? 'Official release publishing' : '官方版本发布'}</h3>
-            <p className="mt-2 text-sm leading-6 text-slate-400">
+            <p className="font-medium text-white">{language === 'en' ? 'Official version publishing' : '官方版本发布'}</p>
+            <p className="mt-1 text-sm text-slate-400">
               {language === 'en'
-                ? 'Approved developers can publish official versions, define first-purchase and transition pricing, and attach branch relationships from the dedicated publishing route.'
-                : '已批准开发者可通过专用发布页发布官方版本、设置首购与版本转换价格，并维护分支关系。'}
+                ? 'Publish official releases, set pricing, and attach branch relationships.'
+                : '发布官方版本、设置价格并维护分支关系。'}
             </p>
           </div>
           <Link
             to="/versions/publish"
-            className="inline-flex items-center rounded-full border border-[var(--accent-hot)]/35 bg-[rgba(85,199,255,0.08)] px-5 py-3 text-sm font-medium text-[var(--text-main)] transition hover:bg-[rgba(255,77,90,0.16)]"
+            className="shrink-0 inline-flex items-center rounded-full border border-[var(--accent-hot)]/35 bg-[rgba(85,199,255,0.08)] px-5 py-3 text-sm font-medium text-[var(--text-main)] transition hover:bg-[rgba(255,77,90,0.16)]"
           >
-            {language === 'en' ? 'Open publish route' : '打开发布页'}
+            {language === 'en' ? 'Publish version' : '发布版本'}
+          </Link>
+        </div>
+        <div className="border-t border-white/5 pt-3 flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+          <div>
+            <p className="font-medium text-white">{language === 'en' ? 'Official DLC publishing' : '官方 DLC 发布'}</p>
+            <p className="mt-1 text-sm text-slate-400">
+              {language === 'en'
+                ? 'Publish paid DLC tied to specific official versions. Separate from public mod submissions.'
+                : '发布与特定官方版本绑定的付费 DLC，与公开模组投稿完全独立。'}
+            </p>
+          </div>
+          <Link
+            to="/dlc/publish"
+            className="shrink-0 inline-flex items-center rounded-full border border-[var(--accent-cold)]/35 bg-[rgba(85,199,255,0.08)] px-5 py-3 text-sm font-medium text-[var(--text-main)] transition hover:bg-[rgba(85,199,255,0.16)]"
+          >
+            {language === 'en' ? 'Publish DLC' : '发布 DLC'}
+          </Link>
+        </div>
+        <div className="border-t border-white/5 pt-3 flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+          <div>
+            <p className="font-medium text-white">{language === 'en' ? 'Public mod submission' : '公开模组投稿'}</p>
+            <p className="mt-1 text-sm text-slate-400">
+              {language === 'en'
+                ? 'Any signed-in user can submit mods with a download link and optional token price.'
+                : '任何已登录用户均可投稿模组，提供下载链接并可选设置代币价格。'}
+            </p>
+          </div>
+          <Link
+            to="/mods"
+            className="shrink-0 inline-flex items-center rounded-full border border-white/20 bg-white/5 px-5 py-3 text-sm font-medium text-[var(--text-main)] transition hover:bg-white/10"
+          >
+            {language === 'en' ? 'Submit a mod' : '投稿模组'}
           </Link>
         </div>
       </section>
@@ -632,6 +669,15 @@ export function PublishVersionClientPage({ editVersionId }: { editVersionId?: st
       {loading ? <LoadingBlock message={language === 'en' ? 'Loading release options…' : '正在加载版本选项…'} /> : null}
       {error ? <ErrorBlock message={language === 'en' ? 'Failed to load publish form data.' : '加载发布表单数据失败。'} /> : null}
       {!error ? <ReleasePublishForm versions={versions} versionsLoading={loading} language={language} editVersionId={resolvedEditVersionId} /> : null}
+    </div>
+  );
+}
+
+export function DlcPublishClientPage() {
+  const { language } = useLanguage();
+  return (
+    <div className="space-y-8">
+      <DlcPublishForm language={language} />
     </div>
   );
 }

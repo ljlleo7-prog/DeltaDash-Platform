@@ -66,7 +66,7 @@ export function ModGrid({ mods, language }: { mods: Mod[]; language: Language })
               <p className="mt-2 text-xs text-slate-500">{mod.soldCount} {language === 'en' ? 'sold' : '已售'}</p>
             </div>
           </div>
-          <RatingWidget targetType="mod" targetId={mod.id} summary={mod.rating} language={language} />
+          <RatingWidget targetType="mod" targetId={mod.id} summary={mod.rating} language={language} interactive />
         </article>
       ))}
     </div>

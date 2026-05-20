@@ -21,13 +21,15 @@ function describeEvent(event: DeltaDashEvent) {
     case 'MATCH_CREATED':
       return 'MATCH_CREATED · local event log initialized';
     case 'ACTION_COMMITTED':
-      return `ACTION_COMMITTED · ${event.carId} chose ${event.action}`;
+      return `ACTION_COMMITTED · ${event.carId} chose ${event.action}${event.targetCarIds?.length ? ` → ${event.targetCarIds.join(', ')}` : ''}`;
     case 'CARD_PLAY_COMMITTED':
-      return `CARD_PLAY_COMMITTED · ${event.carId} played ${event.cardDefinitionId}`;
+      return `CARD_PLAY_COMMITTED · ${event.carId} played ${event.cardDefinitionId}${event.targetCarIds?.length ? ` → ${event.targetCarIds.join(', ')}` : ''}`;
     case 'CARD_MOVED':
       return `CARD_MOVED · ${event.cardInstanceId} to ${event.zone}`;
     case 'CARD_RESOLVED':
       return `CARD_RESOLVED · ${event.carId} resolved ${event.cardDefinitionId}`;
+    case 'CARDS_DRAWN':
+      return `CARDS_DRAWN · ${event.carId} drew ${event.cardInstanceIds.length} card(s)`;
     case 'ACTIONS_RESOLVED':
       return `ACTIONS_RESOLVED · ${event.results.length} cars updated`;
     case 'STEWARD_REVIEWED':

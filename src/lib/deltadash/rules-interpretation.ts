@@ -93,13 +93,13 @@ export const ruleInterpretationNodes: RuleInterpretationNode[] = [
     slug: 'position-rank',
     title: { zh: '位置、排名与关系', en: 'Position, rank, and relationships' },
     summary: {
-      zh: '引擎应存绝对进度并派生排名、前后关系、1.5 秒邻近和超车状态。',
-      en: 'The engine should store absolute progress and derive rank, front/back relationships, 1.5-second proximity, and overtake state.',
+      zh: '引擎应存绝对时间差并派生排名、前后关系、1.5 秒邻近和超车状态。',
+      en: 'The engine should store absolute timeDelta and derive rank, front/back relationships, 1.5-second proximity, and overtake state.',
     },
     details: [
       { zh: '烧胎、保胎、曲线救国和渔翁得利都依赖位置或关系谓词。', en: 'Burn Tires, Protect Tires, Roundabout Rescue, and Fisherman’s Profit all depend on position or relationship predicates.' },
     ],
-    sourceRefs: ['docs/deltadash-local-first-rules-interpretation.md#position-and-progress-system'],
+    sourceRefs: ['docs/deltadash-local-first-rules-interpretation.md#position-and-timeDelta-system'],
     relatedNodeIds: ['card-zones', 'flags-incidents'],
     status: 'inferred',
     tags: ['position', 'rank', 'cards'],
@@ -183,7 +183,7 @@ export const ruleInterpretationNodes: RuleInterpretationNode[] = [
       en: 'Finish detection, round limits, retirement, and scoring should be derived from state and locked through events.',
     },
     details: [
-      { zh: '当前原型已支持进度目标和最大回合；正式计分表后续再接入。', en: 'The current prototype supports progress target and max rounds; official point tables can be added later.' },
+      { zh: '当前原型已支持时间差目标和最大回合；正式计分表后续再接入。', en: 'The current prototype supports time-delta target and max rounds; official point tables can be added later.' },
     ],
     sourceRefs: ['docs/deltadash-local-first-rules-interpretation.md#match-end-and-scoring'],
     relatedNodeIds: ['event-log-first', 'round-lifecycle'],

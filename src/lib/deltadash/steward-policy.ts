@@ -21,7 +21,7 @@ export function runStewardReview(state: DeltaDashMatchState): { notes: DeltaDash
     for (let nextIndex = index + 1; nextIndex < activeCars.length; nextIndex += 1) {
       const left = activeCars[index];
       const right = activeCars[nextIndex];
-      const close = Math.abs(left.progress - right.progress) <= state.track.collisionThreshold;
+      const close = Math.abs(left.timeDelta - right.timeDelta) <= state.track.collisionTimeThreshold;
       const aggressive = left.lastAction === 'push' || right.lastAction === 'push';
 
       if (!close || !aggressive) continue;

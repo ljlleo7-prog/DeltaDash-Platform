@@ -34,7 +34,7 @@ Priority is the top-left corner value. `X` means the cost or priority is variabl
 
 **Effect:** Offensive attack action. Full rule text partially illegible; functions as the core attack card in the game.
 
-**Logic interpretation:** Represents a direct racing attack move. High priority (5) means it resolves before most other cards. Likely deals progress or position damage to a target.
+**Logic interpretation:** Represents a direct racing attack move. High priority (5) means it resolves before most other cards. Likely deals time delta or position damage to a target.
 
 ---
 
@@ -64,7 +64,7 @@ Priority is the top-left corner value. `X` means the cost or priority is variabl
 
 **Effect:** Use one card to add to the current turn's energy release (MJ). Cannot exceed the energy cap. [partial text unclear]
 
-**Logic interpretation:** Spends a card to boost energy output this turn. The cap constraint means it cannot be stacked infinitely. Likely maps to the energy-release mechanic in the rules interpretation (energy → progress conversion).
+**Logic interpretation:** Spends a card to boost energy output this turn. The cap constraint means it cannot be stacked infinitely. Likely maps to the energy-release mechanic in the rules interpretation (energy → time delta conversion).
 
 ---
 

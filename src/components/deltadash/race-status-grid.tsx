@@ -7,7 +7,7 @@ export function RaceStatusGrid({ state, language }: { state: DeltaDashMatchState
       <StatusCard label={language === 'en' ? 'Round' : '回合'} value={String(state.round)} />
       <StatusCard label={language === 'en' ? 'Phase' : '阶段'} value={state.phase} />
       <StatusCard label={language === 'en' ? 'Flag' : '旗况'} value={state.flag.toUpperCase()} />
-      <StatusCard label={language === 'en' ? 'Finish' : '终点'} value={`${state.track.finishProgress}`} />
+      <StatusCard label={language === 'en' ? 'Finish' : '终点'} value={`${state.track.finishTimeDelta}`} />
     </section>
   );
 }

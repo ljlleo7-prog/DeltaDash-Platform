@@ -8,7 +8,7 @@ DeltaDash Platform is evolving from a read-focused official release hub into a s
 2. staged community setup for mods, forks, and discussions
 3. a closed-loop internal token economy for rewards and gated access
 
-The goal is not just to add purchases. The platform should create a coherent loop where official releases, community contribution, and user progression support one another.
+The goal is not just to add purchases. The platform should create a coherent loop where official releases, community contribution, and user time deltaion support one another.
 
 Initial intended loop:
 
@@ -31,7 +31,7 @@ Initial intended loop:
 ### Secondary goals
 - Make release relationships easier to understand for players.
 - Give community creators a clear path to participate.
-- Prepare for future contributor progression using reputation.
+- Prepare for future contributor time deltaion using reputation.
 - Build a foundation for later missions, curator roles, and contributor applications.
 
 ---
@@ -282,7 +282,7 @@ Introduce two balances:
 - `token_balance`
 - used for purchases
 
-### Trust/progression balance
+### Trust/time deltaion balance
 - `reputation_balance`
 - used for future unlocks, contributor ranking, and moderation trust
 

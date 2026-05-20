@@ -1,16 +1,9 @@
-import { createPrototypeCardInstances } from './card-setup';
+import { createInitialCardInstances, DELTADASH_RACE_INIT } from './card-setup';
 import { prototypeDrivers } from './driver-catalog';
-import type { DeltaDashEvent, DeltaDashMatchState, DeltaDashTrack } from './types';
+import { createDeltaDashTrack, DEFAULT_REAL_TRACK_ID } from './track-catalog';
+import type { DeltaDashEvent, DeltaDashMatchState } from './types';
 
-const DEMO_TRACK: DeltaDashTrack = {
-  id: 'neon-stadium-short',
-  name: 'Neon Stadium Short',
-  finishProgress: 30,
-  collisionThreshold: 1,
-  maxRounds: 12,
-};
-
-export function createInitialMatchEvent(): DeltaDashEvent {
+export function createInitialMatchEvent(trackKey = DEFAULT_REAL_TRACK_ID): DeltaDashEvent {
   const players = prototypeDrivers.map((driver, index) => {
     const isHuman = index === 0;
     return {
@@ -27,14 +20,14 @@ export function createInitialMatchEvent(): DeltaDashEvent {
 
   const match: DeltaDashMatchState = {
     id: `local-${Date.now()}`,
-    seed: 2026,
+    seed: DELTADASH_RACE_INIT.seed,
     round: 1,
     phase: 'planning',
-    track: DEMO_TRACK,
+    track: createDeltaDashTrack(trackKey),
     flag: 'green',
     players,
     cars,
-    cards: createPrototypeCardInstances(cars),
+    cards: createInitialCardInstances(cars, DELTADASH_RACE_INIT.seed),
     commitments: [],
     stewardNotes: [],
     finishedAtRound: null,
@@ -49,11 +42,14 @@ function createCar(id: string, playerId: string, driverId: string, name: string)
     playerId,
     driverId,
     name,
-    progress: 0,
-    energy: 3,
-    tire: 6,
+    timeDelta: DELTADASH_RACE_INIT.startingTimeDelta,
+    energy: DELTADASH_RACE_INIT.startingEnergy,
+    tire: DELTADASH_RACE_INIT.startingTire,
+    focus: DELTADASH_RACE_INIT.startingFocus,
+    focusCap: DELTADASH_RACE_INIT.focusCap,
     warnings: 0,
     penalties: [],
+    roundModifiers: [],
     lastAction: null,
     retired: false,
   };

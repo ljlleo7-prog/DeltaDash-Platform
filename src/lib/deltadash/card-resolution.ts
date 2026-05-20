@@ -2,7 +2,7 @@ import type { DeltaDashCardDefinition, DeltaDashEffectPrimitive } from './card-t
 import type { DeltaDashCar, DeltaDashMatchState, DeltaDashResolvedAction } from './types';
 
 export function canPlayCard(state: DeltaDashMatchState, car: DeltaDashCar, card: DeltaDashCardDefinition): boolean {
-  if (card.implementationStatus !== 'implemented') return false;
+  if (card.implementationStatus === 'documented-only') return false;
 
   return card.conditions.every((condition) => {
     switch (condition.type) {
@@ -12,6 +12,8 @@ export function canPlayCard(state: DeltaDashMatchState, car: DeltaDashCar, card:
         return car.energy >= condition.value;
       case 'min_tire':
         return car.tire >= condition.value;
+      case 'has_hand_cards':
+        return state.cards.some((cardInstance) => cardInstance.ownerCarId === car.id && cardInstance.zone === 'hand');
       case 'flag_is':
         return state.flag === condition.value;
       case 'flag_not':
@@ -26,32 +28,46 @@ export function canPlayCard(state: DeltaDashMatchState, car: DeltaDashCar, card:
   });
 }
 
-export function resolveCardEffects(state: DeltaDashMatchState, car: DeltaDashCar, card: DeltaDashCardDefinition): DeltaDashResolvedAction {
+export function resolveCardEffects(state: DeltaDashMatchState, car: DeltaDashCar, card: DeltaDashCardDefinition, targetCar?: DeltaDashCar): DeltaDashResolvedAction {
   const effectiveEffects = canPlayCard(state, car, card) ? card.effects : [];
-  const yellowFlag = state.flag === 'yellow' || car.penalties.includes('speed-cap');
+  const target = targetCar ?? car;
+  const yellowFlag = state.flag === 'yellow' || target.penalties.includes('speed-cap');
 
   return effectiveEffects.reduce<DeltaDashResolvedAction>((result, effect) => applyEffect(result, effect, yellowFlag), {
-    carId: car.id,
+    carId: target.id,
+    sourceCarId: car.id,
     action: card.actionBridge ?? 'steady',
     cardDefinitionId: card.id,
-    progressDelta: 0,
+    targetCarId: target.id,
+    timeDeltaChange: 0,
     energyDelta: 0,
     tireDelta: 0,
+    focusDelta: 0,
+    energyMin: undefined,
+    energyMax: undefined,
+    tireMin: undefined,
+    tireMax: undefined,
+    focusMin: undefined,
+    focusMax: undefined,
+    roundModifiers: [],
   });
 }
 
 function applyEffect(result: DeltaDashResolvedAction, effect: DeltaDashEffectPrimitive, yellowFlag: boolean): DeltaDashResolvedAction {
   switch (effect.type) {
-    case 'modify_progress':
-      return { ...result, progressDelta: result.progressDelta + (yellowFlag && effect.yellowAmount !== undefined ? effect.yellowAmount : effect.amount) };
+    case 'modify_time_delta':
+      return { ...result, timeDeltaChange: result.timeDeltaChange + (yellowFlag && effect.yellowAmount !== undefined ? effect.yellowAmount : effect.amount) };
     case 'modify_energy':
-      return { ...result, energyDelta: result.energyDelta + effect.amount };
+      return { ...result, energyDelta: result.energyDelta + effect.amount, energyMin: effect.min ?? result.energyMin, energyMax: effect.max ?? result.energyMax };
     case 'modify_tire':
-      return { ...result, tireDelta: result.tireDelta + effect.amount };
+      return { ...result, tireDelta: result.tireDelta + effect.amount, tireMin: effect.min ?? result.tireMin, tireMax: effect.max ?? result.tireMax };
+    case 'modify_focus':
+      return { ...result, focusDelta: (result.focusDelta ?? 0) + effect.amount, focusMin: effect.min ?? result.focusMin, focusMax: effect.max ?? result.focusMax };
+    case 'set_round_modifier':
+      return { ...result, roundModifiers: [...(result.roundModifiers ?? []), effect.modifier] };
     case 'apply_penalty':
     case 'clear_penalty':
     case 'draw_cards':
-    case 'set_round_modifier':
     case 'no_effect':
       return result;
     default: {

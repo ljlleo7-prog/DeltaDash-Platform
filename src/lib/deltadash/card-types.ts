@@ -15,19 +15,30 @@ export type DeltaDashCardCondition =
   | { type: 'not_retired' }
   | { type: 'min_energy'; value: number }
   | { type: 'min_tire'; value: number }
+  | { type: 'has_hand_cards' }
   | { type: 'flag_is'; value: DeltaDashFlag }
   | { type: 'flag_not'; value: DeltaDashFlag }
   | { type: 'documented-only'; reason: string };
 
 export type DeltaDashEffectPrimitive =
-  | { type: 'modify_progress'; amount: number; yellowAmount?: number }
+  | { type: 'modify_time_delta'; amount: number; yellowAmount?: number }
   | { type: 'modify_energy'; amount: number; min?: number; max?: number }
   | { type: 'modify_tire'; amount: number; min?: number; max?: number }
+  | { type: 'modify_focus'; amount: number; min?: number; max?: number }
   | { type: 'apply_penalty'; penalty: DeltaDashPenalty }
   | { type: 'clear_penalty'; penalty: DeltaDashPenalty }
   | { type: 'draw_cards'; amount: number }
   | { type: 'set_round_modifier'; modifier: string }
   | { type: 'no_effect' };
+
+export type DeltaDashCardTargeting = {
+  kind: 'self' | 'opponent' | 'all-opponents' | 'none';
+  range?: {
+    minTimeGap?: number;
+    maxTimeGap?: number;
+    inFrontOnly?: boolean;
+  };
+};
 
 export type DeltaDashCardDefinition = {
   id: string;
@@ -39,9 +50,7 @@ export type DeltaDashCardDefinition = {
   priority: DeltaDashCardPriority;
   count: string;
   tags: string[];
-  targeting: {
-    kind: 'self' | 'opponent' | 'all-opponents' | 'none';
-  };
+  targeting: DeltaDashCardTargeting;
   conditions: DeltaDashCardCondition[];
   effects: DeltaDashEffectPrimitive[];
   onFailedConditions: 'return-to-hand' | 'discard' | 'no-effect' | 'stay-deployed';

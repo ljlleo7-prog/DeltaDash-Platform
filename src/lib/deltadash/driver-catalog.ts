@@ -11,30 +11,30 @@ export type DeltaDashDriverDefinition = {
 export const prototypeDrivers: DeltaDashDriverDefinition[] = [
   {
     id: 'driver-delta-one',
-    name: 'Delta One',
+    name: 'Alpha',
     imageUrl: '/deltadash/drivers/4.0/slide-01.png',
-    carName: 'Delta One',
+    carName: 'Alpha',
     botProfile: 'balanced',
   },
   {
     id: 'driver-redline-ghost',
-    name: 'Redline Ghost',
+    name: 'Bravo',
     imageUrl: '/deltadash/drivers/4.0/slide-02.png',
-    carName: 'Redline Ghost',
+    carName: 'Bravo',
     botProfile: 'aggressive',
   },
   {
     id: 'driver-azure-spark',
-    name: 'Azure Spark',
+    name: 'Charlie',
     imageUrl: '/deltadash/drivers/4.0/slide-03.png',
-    carName: 'Azure Spark',
+    carName: 'Charlie',
     botProfile: 'balanced',
   },
   {
     id: 'driver-night-runner',
-    name: 'Night Runner',
+    name: 'Delta',
     imageUrl: '/deltadash/drivers/4.0/slide-04.png',
-    carName: 'Night Runner',
+    carName: 'Delta',
     botProfile: 'conservative',
   },
 ];

@@ -6,7 +6,7 @@ import {
   getOfficialLoginUrl,
   getSharedSessionProfile,
   getSharedWallet,
-  getSupabaseClient,
+  signOutSharedSession,
   isReleaseAdminProfile,
   resolveSharedTokenBalance,
   resolveSharedUserDisplayName,
@@ -46,7 +46,6 @@ export function AuthStatusPanel({ language }: { language: Language }) {
     : getOfficialLoginUrl(`${window.location.pathname}${window.location.search}${window.location.hash}` || '/');
 
   useEffect(() => {
-    const supabase = getSupabaseClient();
     let active = true;
     let requestId = 0;
 
@@ -69,19 +68,8 @@ export function AuthStatusPanel({ language }: { language: Language }) {
 
     void loadProfile();
 
-    if (!supabase) {
-      return () => {
-        active = false;
-      };
-    }
-
-    const { data } = supabase.auth.onAuthStateChange(() => {
-      void loadProfile();
-    });
-
     return () => {
       active = false;
-      data.subscription.unsubscribe();
     };
   }, []);
 
@@ -103,9 +91,7 @@ export function AuthStatusPanel({ language }: { language: Language }) {
   const balance = state.tokenBalance;
 
   async function handleSignOut() {
-    const supabase = getSupabaseClient();
-    if (!supabase) return;
-    await supabase.auth.signOut();
+    await signOutSharedSession();
     setState({ user: null, profile: null, tokenBalance: null, isApprovedDeveloper: false, loading: false });
   }
 

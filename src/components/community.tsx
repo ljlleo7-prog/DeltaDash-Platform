@@ -70,7 +70,8 @@ function useSessionState() {
       return;
     }
 
-    const { data } = supabase.auth.onAuthStateChange(() => {
+    const { data } = supabase.auth.onAuthStateChange((event) => {
+      if (event === 'TOKEN_REFRESHED') return;
       void loadSession();
     });
 

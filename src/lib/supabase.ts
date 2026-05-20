@@ -38,6 +38,10 @@ export type SharedSessionProfile = {
 
 let browserClient: SupabaseClient | null = null;
 let serverClient: SupabaseClient | null = null;
+let sharedSessionProfileCache: { value: SharedSessionProfile; cachedAt: number } | null = null;
+let sharedSessionProfilePromise: Promise<SharedSessionProfile> | null = null;
+
+const SHARED_SESSION_PROFILE_CACHE_MS = 10_000;
 
 function getSharedCookieDomainAttribute() {
   return sharedCookieDomain ? `; domain=${sharedCookieDomain}` : '';
@@ -168,6 +172,33 @@ export function getSupabaseClient() {
 }
 
 export async function getSharedSessionProfile(): Promise<SharedSessionProfile> {
+  if (typeof window !== 'undefined' && sharedSessionProfileCache && Date.now() - sharedSessionProfileCache.cachedAt < SHARED_SESSION_PROFILE_CACHE_MS) {
+    return sharedSessionProfileCache.value;
+  }
+
+  if (typeof window !== 'undefined' && sharedSessionProfilePromise) {
+    return sharedSessionProfilePromise;
+  }
+
+  const request = loadSharedSessionProfile();
+
+  if (typeof window === 'undefined') {
+    return request;
+  }
+
+  sharedSessionProfilePromise = request
+    .then((value) => {
+      sharedSessionProfileCache = { value, cachedAt: Date.now() };
+      return value;
+    })
+    .finally(() => {
+      sharedSessionProfilePromise = null;
+    });
+
+  return sharedSessionProfilePromise;
+}
+
+async function loadSharedSessionProfile(): Promise<SharedSessionProfile> {
   const supabase = getSupabaseClient();
   if (!supabase) {
     return {
@@ -244,6 +275,14 @@ export async function reauthenticateWithPassword(password: string) {
   if (error) {
     throw new Error(error.message || 'Password confirmation failed.');
   }
+}
+
+export async function signOutSharedSession() {
+  const supabase = getSupabaseClient();
+  if (!supabase) return;
+  sharedSessionProfileCache = null;
+  sharedSessionProfilePromise = null;
+  await supabase.auth.signOut();
 }
 
 export function getOfficialLoginUrl(nextPath = '/') {

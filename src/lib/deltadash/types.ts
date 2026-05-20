@@ -13,9 +13,13 @@ export type DeltaDashPenalty = 'warning' | 'speed-cap' | 'retired';
 export interface DeltaDashTrack {
   id: string;
   name: string;
-  finishProgress: number;
-  collisionThreshold: number;
+  finishTimeDelta: number;
+  collisionTimeThreshold: number;
   maxRounds: number;
+  rainMm: number;
+  surfaceGrip: number;
+  tyreStress: number;
+  realTrackKey?: string;
 }
 
 export interface DeltaDashPlayer {
@@ -30,11 +34,14 @@ export interface DeltaDashCar {
   playerId: string;
   driverId: string;
   name: string;
-  progress: number;
+  timeDelta: number;
   energy: number;
   tire: number;
+  focus: number;
+  focusCap: number;
   warnings: number;
   penalties: DeltaDashPenalty[];
+  roundModifiers: string[];
   lastAction: DeltaDashActionType | null;
   retired: boolean;
 }
@@ -44,6 +51,7 @@ export interface DeltaDashActionCommitment {
   action: DeltaDashActionType;
   cardDefinitionId?: string;
   cardInstanceId?: string;
+  targetCarIds?: string[];
 }
 
 export interface DeltaDashStewardNote {
@@ -83,6 +91,7 @@ export type DeltaDashEvent =
       round: number;
       carId: string;
       action: DeltaDashActionType;
+      targetCarIds?: string[];
     }
   | {
       type: 'CARD_PLAY_COMMITTED';
@@ -91,6 +100,7 @@ export type DeltaDashEvent =
       cardInstanceId: string;
       cardDefinitionId: string;
       action: DeltaDashActionType;
+      targetCarIds?: string[];
     }
   | {
       type: 'CARD_MOVED';
@@ -98,12 +108,19 @@ export type DeltaDashEvent =
       cardInstanceId: string;
       zone: DeltaDashCardInstance['zone'];
       revealed: boolean;
+      clearRoundModifiers?: string[];
     }
   | {
       type: 'CARD_RESOLVED';
       round: number;
       carId: string;
       cardDefinitionId: string;
+    }
+  | {
+      type: 'CARDS_DRAWN';
+      round: number;
+      carId: string;
+      cardInstanceIds: string[];
     }
   | {
       type: 'COMMITMENTS_LOCKED';
@@ -133,9 +150,19 @@ export interface DeltaDashResolvedAction {
   carId: string;
   action: DeltaDashActionType;
   cardDefinitionId?: string;
-  progressDelta: number;
+  sourceCarId?: string;
+  targetCarId?: string;
+  timeDeltaChange: number;
   energyDelta: number;
   tireDelta: number;
+  focusDelta?: number;
+  energyMin?: number;
+  energyMax?: number;
+  tireMin?: number;
+  tireMax?: number;
+  focusMin?: number;
+  focusMax?: number;
+  roundModifiers?: string[];
 }
 
 export interface DeltaDashRankedCar extends DeltaDashCar {

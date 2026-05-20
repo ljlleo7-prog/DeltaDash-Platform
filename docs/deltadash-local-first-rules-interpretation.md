@@ -111,7 +111,7 @@ Use a strict phase machine:
    - Attack/defense/release response windows are opened as needed.
 4. `DataUpdate`
    - Apply energy, tire, focus, card, penalty, and movement effects.
-   - Recompute progress, rank, and relationships.
+   - Recompute time delta, rank, and relationships.
    - Evaluate incidents, flags, pit status, retirement, finish, and scoring triggers.
 5. `Cleanup`
    - Discard resolved cards.
@@ -172,7 +172,7 @@ Energy is highly conflict-sensitive because response cards and defense can spend
 
 ---
 
-### Position and Progress System
+### Position and Time delta System
 
 #### Rulebook Meaning
 
@@ -180,12 +180,12 @@ Position includes rank, relative distance, front/back relationships, straight mo
 
 #### Digital Interpretation
 
-Do not store rank as the primary source of truth. Store absolute progress and derive rank.
+Do not store rank as the primary source of truth. Store absolute time delta and derive rank.
 
 Suggested model:
 
 ```ts
-type CarProgress = {
+type CarTime delta = {
   lap: number
   distanceSeconds: number
   sector?: string
@@ -195,7 +195,7 @@ type CarProgress = {
 
 Derived values:
 
-- `rank`: sorted by lap and progress
+- `rank`: sorted by lap and time delta
 - `deltaToFront`: difference from the next car ahead
 - `deltaToBehind`: difference from the next car behind
 - `isWheelToWheel`: true when cars occupy the same relationship slot
@@ -204,7 +204,7 @@ Derived values:
 
 #### Event / Update Rules
 
-- Movement effects update absolute progress.
+- Movement effects update absolute time delta.
 - Rank is recomputed after all simultaneous movement is applied.
 - If two cars become equal or overlapping, create or update wheel-to-wheel state.
 - If a car is forced backward, recompute relationships after the forced movement.
@@ -212,11 +212,11 @@ Derived values:
 
 #### Local-First Sync Concerns
 
-All clients must use the same sorting and tie-breaker rules. Tie-breakers should be explicit: lap, progress, same-position comparison, delta values, then prior order or priority rule.
+All clients must use the same sorting and tie-breaker rules. Tie-breakers should be explicit: lap, time delta, same-position comparison, delta values, then prior order or priority rule.
 
 #### Open Questions
 
-- The exact unit of progress should be confirmed: seconds, grid cells, sectors, or hybrid.
+- The exact unit of time delta should be confirmed: seconds, grid cells, sectors, or hybrid.
 - The rulebook uses both time delta and table position language; the engine should pick one canonical storage form.
 
 ---
@@ -311,7 +311,7 @@ Response windows must be deterministic and bounded. The engine should know who i
 
 #### Rulebook Meaning
 
-Track data controls progression, weather, pit behavior, lap count, rank updates, and track-specific effects. Rank and relationships decide legal targets, overtakes, and flag/incident outcomes.
+Track data controls time deltaion, weather, pit behavior, lap count, rank updates, and track-specific effects. Rank and relationships decide legal targets, overtakes, and flag/incident outcomes.
 
 #### Digital Interpretation
 
@@ -443,7 +443,7 @@ The engine-facing update order should be:
 5. Resolve card and action priority.
 6. Open and close response windows.
 7. Apply energy, tire, focus, and card effects.
-8. Apply progress/movement changes.
+8. Apply time delta/movement changes.
 9. Recompute rank.
 10. Recompute relationship predicates.
 11. Evaluate incidents and flags.
@@ -506,15 +506,15 @@ The match ends after the final round/lap condition. Final standings compare comp
 
 ### Digital Interpretation
 
-Finish order should be derived from final progress state, then adjusted by penalties or disqualifications.
+Finish order should be derived from final time delta state, then adjusted by penalties or disqualifications.
 
 Suggested ranking comparison:
 
 1. More completed laps wins.
-2. If equal, greater progress/delta wins.
+2. If equal, greater time delta/delta wins.
 3. If still equal, compare exact delta values.
 4. If fully equal, apply the rulebook's tie flow: same lap and same delta may become a first-hand advantage or prior-order comparison depending on context.
-5. Retired/disqualified cars are ranked according to retirement/disqualification rules, not ordinary progress.
+5. Retired/disqualified cars are ranked according to retirement/disqualification rules, not ordinary time delta.
 
 ### Required Events
 
@@ -576,7 +576,7 @@ type Player = {
 
 Each car remains an independent `Car` with its own:
 
-- progress
+- time delta
 - energy
 - tire durability
 - hand
@@ -696,7 +696,7 @@ Core events should include:
 
 ## Open Questions and Ambiguities
 
-1. The canonical progress unit should be confirmed: seconds, grids, sectors, or a hybrid.
+1. The canonical time delta unit should be confirmed: seconds, grids, sectors, or a hybrid.
 2. Some card recovery rules may be card-specific; the engine needs card metadata before finalizing zone movement.
 3. The exact timing of flag duration countdowns should be confirmed.
 4. Red-flag restart behavior needs a precise digital interpretation.
@@ -715,7 +715,7 @@ Suggested section slugs:
 - `match-setup`
 - `round-flow`
 - `energy`
-- `position-progress`
+- `position-time delta`
 - `cards`
 - `attack-defense-response`
 - `track-rank-relationships`

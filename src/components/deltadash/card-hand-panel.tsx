@@ -1,6 +1,7 @@
 import type { Language } from '@/lib/i18n';
 import { getCardsForCar } from '@/lib/deltadash/card-selectors';
 import { getFinishSummary } from '@/lib/deltadash/selectors';
+import { getValidTargetCars } from '@/lib/deltadash/targeting';
 import type { DeltaDashCar, DeltaDashMatchState } from '@/lib/deltadash/types';
 import { CardPlayCard } from './card-play-card';
 
@@ -13,11 +14,21 @@ export function CardHandPanel({
   state: DeltaDashMatchState;
   humanCar: DeltaDashCar | null;
   language: Language;
-  onCard: (cardDefinitionId: string) => void;
+  onCard: (cardDefinitionId: string, targetCarIds?: string[]) => void;
 }) {
   const cards = humanCar ? getCardsForCar(state, humanCar.id) : [];
-  const implementedCards = cards.filter((card) => card.definition.implementationStatus === 'implemented');
-  const referenceCards = cards.filter((card) => card.definition.implementationStatus !== 'implemented');
+  const playableCards = cards.filter((card) => card.definition.implementationStatus !== 'documented-only');
+  const referenceCards = cards.filter((card) => card.definition.implementationStatus === 'documented-only');
+  const renderCard = (card: (typeof cards)[number]) => (
+    <CardPlayCard
+      key={card.definition.id}
+      card={card}
+      language={language}
+      sourceCar={humanCar}
+      validTargets={humanCar ? getValidTargetCars(state, humanCar, card.definition) : []}
+      onPlay={onCard}
+    />
+  );
 
   return (
     <section className="rounded-3xl border border-white/10 bg-white/5 p-5">
@@ -34,14 +45,14 @@ export function CardHandPanel({
               : '已实现的原型牌现在可打出。临时与仅文档牌会作为后续修订用的结构化规则目录展示。'}
           </p>
           <div className="mt-4 grid gap-3">
-            {implementedCards.map((card) => <CardPlayCard key={card.definition.id} card={card} language={language} onPlay={onCard} />)}
+            {playableCards.map(renderCard)}
           </div>
           <details className="mt-4 rounded-2xl border border-white/10 bg-black/20 p-4">
             <summary className="cursor-pointer text-sm font-semibold text-slate-200">
               {language === 'en' ? 'Reference card catalog' : '参考卡牌目录'} · {referenceCards.length}
             </summary>
             <div className="mt-4 grid gap-3">
-              {referenceCards.map((card) => <CardPlayCard key={card.definition.id} card={card} language={language} onPlay={onCard} />)}
+              {referenceCards.map(renderCard)}
             </div>
           </details>
         </>

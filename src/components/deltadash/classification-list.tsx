@@ -26,7 +26,7 @@ export function ClassificationList({
         {rankedCars.map((car) => {
           const owner = state.players.find((player) => player.carId === car.id);
           const commitment = getCommitment(state, car.id);
-          const progressPercent = Math.min(100, (car.progress / state.track.finishProgress) * 100);
+          const timeDeltaPercent = Math.min(100, (car.timeDelta / state.track.finishTimeDelta) * 100);
           const presentation = getCarPresentation(car);
 
           return (
@@ -42,14 +42,15 @@ export function ClassificationList({
                   </div>
                   <div className="text-right text-xs text-slate-300">
                     <p>{language === 'en' ? 'Energy' : '电量'} {car.energy}/6 · {language === 'en' ? 'Tire' : '轮胎'} {car.tire}/6</p>
+                    <p>{language === 'en' ? 'Focus' : '专注'} {car.focus ?? 0}/{car.focusCap ?? 8}</p>
                     <p>{language === 'en' ? 'Last' : '上回合'}: {car.lastAction ?? '-'}</p>
                   </div>
                 </div>
                 <div className="mt-4 h-2 overflow-hidden rounded-full bg-white/10">
-                  <div className="h-full rounded-full bg-[linear-gradient(90deg,var(--accent-cold),var(--accent-hot))]" style={{ width: `${progressPercent}%` }} />
+                  <div className="h-full rounded-full bg-[linear-gradient(90deg,var(--accent-cold),var(--accent-hot))]" style={{ width: `${timeDeltaPercent}%` }} />
                 </div>
                 <div className="mt-3 flex flex-wrap gap-2 text-xs text-slate-400">
-                  <span>{language === 'en' ? 'Progress' : '进度'} {car.progress}/{state.track.finishProgress}</span>
+                  <span>{language === 'en' ? 'Time delta' : '时间差'} {car.timeDelta}/{state.track.finishTimeDelta}</span>
                   <span>{language === 'en' ? 'Committed' : '已提交'}: {commitment?.action ?? '-'}</span>
                   {car.penalties.map((penalty) => <span key={penalty} className="rounded-full border border-yellow-300/20 bg-yellow-500/10 px-2 py-1 text-yellow-100">{penalty}</span>)}
                 </div>

@@ -6,22 +6,22 @@ const actionCopy: Record<DeltaDashActionType, { zh: string; en: string; descript
   steady: {
     zh: '稳定推进',
     en: 'Steady',
-    description: { zh: '+3 进度，+1 电量，-1 轮胎。黄旗/限速下 +2。', en: '+3 progress, +1 energy, -1 tire. +2 under yellow/speed cap.' },
+    description: { zh: '+1.5s，+1 电量，-1 轮胎。黄旗/限速下 +1.0s。', en: '+1.5s, +1 energy, -1 tire. +1.0s under yellow/speed cap.' },
   },
   push: {
     zh: '强推',
     en: 'Push',
-    description: { zh: '+5 进度，-2 电量，-2 轮胎，增加事故风险。', en: '+5 progress, -2 energy, -2 tire, higher incident risk.' },
+    description: { zh: '+2.5s，-2 电量，-2 轮胎，增加事故风险。', en: '+2.5s, -2 energy, -2 tire, higher incident risk.' },
   },
   defend: {
     zh: '防守',
     en: 'Defend',
-    description: { zh: '+2 进度，保守通过本回合。', en: '+2 progress with safer race posture.' },
+    description: { zh: '+1.0s，保守通过本回合。', en: '+1.0s with safer race posture.' },
   },
   recover: {
     zh: '回收',
     en: 'Recover',
-    description: { zh: '+1 进度，+2 电量，+1 轮胎。', en: '+1 progress, +2 energy, +1 tire.' },
+    description: { zh: '+0.5s，+2 电量，+1 轮胎。', en: '+0.5s, +2 energy, +1 tire.' },
   },
 };
 

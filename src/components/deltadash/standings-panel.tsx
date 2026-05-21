@@ -60,7 +60,9 @@ export function StandingsPanel({
               </div>
               <div className="text-right font-mono">
                 <p className={gap === 'LEAD' ? 'font-black text-lime-200' : 'text-cyan-100'}>{gap}</p>
-                <p className="text-[0.65rem] text-slate-400">E{car.energy} T{car.tire} F{car.focus ?? 0}</p>
+                <p className="text-[0.65rem] text-slate-400">E{car.energy}/4 T{Math.round(car.tire)}% F{car.focus ?? 0}/{car.focusCap ?? 8}</p>
+                <p className="text-[0.6rem] uppercase tracking-[0.12em] text-slate-500">{car.tyreState.compound} · age {car.tyreState.age} · pit {car.pitState.status}</p>
+                <p className="text-[0.6rem] uppercase tracking-[0.12em] text-slate-500">grid #{car.rank} · race {car.driverStats.raceModifier >= 0 ? '+' : ''}{car.driverStats.raceModifier} · quali {car.driverStats.qualifyingModifier >= 0 ? '+' : ''}{car.driverStats.qualifyingModifier}</p>
               </div>
             </article>
           );

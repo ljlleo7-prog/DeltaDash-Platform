@@ -1,4 +1,4 @@
-import type { DeltaDashMatchState, DeltaDashStewardNote } from './types';
+import type { DeltaDashCar, DeltaDashMatchState, DeltaDashStewardNote } from './types';
 
 export function runStewardReview(state: DeltaDashMatchState): { notes: DeltaDashStewardNote[]; flag: 'green' | 'yellow' } {
   const notes: DeltaDashStewardNote[] = [];
@@ -21,26 +21,40 @@ export function runStewardReview(state: DeltaDashMatchState): { notes: DeltaDash
     for (let nextIndex = index + 1; nextIndex < activeCars.length; nextIndex += 1) {
       const left = activeCars[index];
       const right = activeCars[nextIndex];
-      const close = Math.abs(left.timeDelta - right.timeDelta) <= state.track.collisionTimeThreshold;
+      const gap = Math.abs(left.timeDelta - right.timeDelta);
+      const wheelToWheel = gap <= getWheelToWheelThreshold(state);
+      const close = gap <= state.track.collisionTimeThreshold + (state.track.weather.trackWetness * 0.18);
       const aggressive = left.lastAction === 'push' || right.lastAction === 'push';
+
+      if (wheelToWheel) {
+        notes.push({
+          id: `${state.round}-${left.id}-${right.id}-wheel-to-wheel`,
+          round: state.round,
+          carIds: [left.id, right.id],
+          severity: 'info',
+          message: `${left.name} and ${right.name} are wheel-to-wheel; relationship lock stays until the gap opens beyond ${getWheelToWheelThreshold(state).toFixed(1)}s.`,
+        });
+      }
 
       if (!close || !aggressive) continue;
 
-      const severity = left.warnings > 0 || right.warnings > 0 ? 'penalty' : 'warning';
+      const severity = getIncidentSeverity(state, left, right, gap);
       notes.push({
         id: `${state.round}-${left.id}-${right.id}-incident`,
         round: state.round,
         carIds: [left.id, right.id],
         severity,
         message:
-          severity === 'penalty'
-            ? `${left.name} and ${right.name} triggered a repeated close-racing incident. Next round speed cap applied.`
-            : `${left.name} and ${right.name} triggered a close-racing warning.`,
+          severity === 'retirement'
+            ? `${left.name} and ${right.name} suffered a heavy collision; damaged cars are retired.`
+            : severity === 'penalty'
+              ? `${left.name} and ${right.name} triggered a repeated close-racing incident. Next round speed cap applied.`
+              : `${left.name} and ${right.name} triggered a close-racing warning.`,
       });
     }
   }
 
-  const flag = notes.some((note) => note.carIds.length > 1) ? 'yellow' : 'green';
+  const flag = notes.some((note) => note.carIds.length > 1 && note.severity !== 'info') ? 'yellow' : 'green';
 
   if (!notes.length) {
     notes.push({
@@ -53,4 +67,19 @@ export function runStewardReview(state: DeltaDashMatchState): { notes: DeltaDash
   }
 
   return { notes, flag };
+}
+
+function getWheelToWheelThreshold(state: DeltaDashMatchState): number {
+  return state.track.collisionTimeThreshold * 0.5;
+}
+
+function getIncidentSeverity(state: DeltaDashMatchState, left: DeltaDashCar, right: DeltaDashCar, gap: number): 'warning' | 'penalty' | 'retirement' {
+  const bothPushing = left.lastAction === 'push' && right.lastAction === 'push';
+  const veryClose = gap <= state.track.collisionTimeThreshold * 0.3;
+  const highSpeed = state.track.weather.trackWetness < 0.2 && state.track.tyreStress >= 0.7;
+  const priorWarnings = left.warnings + right.warnings;
+
+  if (bothPushing && veryClose && highSpeed && priorWarnings >= 2) return 'retirement';
+  if (priorWarnings > 0 || (bothPushing && veryClose)) return 'penalty';
+  return 'warning';
 }

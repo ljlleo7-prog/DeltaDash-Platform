@@ -26,10 +26,10 @@ export function TrackTimelinePanel({ state, language }: { state: DeltaDashMatchS
           <h3 className="mt-1 text-3xl font-black italic text-white">{state.track.name}</h3>
         </div>
         <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
-          <TrackStat label={language === 'en' ? 'Finish' : '终点'} value={`${trackStats.finishSeconds.toFixed(1)}s`} tone="yellow" />
-          <TrackStat label={language === 'en' ? 'Round' : '回合'} value={trackStats.roundLabel} tone="cyan" />
-          <TrackStat label={language === 'en' ? 'Rain' : '雨量'} value={`${trackStats.rainMm.toFixed(1)}mm`} tone="blue" />
+          <TrackStat label={language === 'en' ? 'Sky' : '天空'} value={formatSky(trackStats.skyLabel, language)} tone="blue" />
+          <TrackStat label={language === 'en' ? 'Wetness' : '湿度'} value={`${trackStats.trackWetnessPercent}%`} tone="cyan" />
           <TrackStat label={language === 'en' ? 'Grip' : '抓地'} value={`${trackStats.surfaceGripPercent}%`} tone="lime" />
+          <TrackStat label={language === 'en' ? 'Finish' : '终点'} value={`${trackStats.finishSeconds.toFixed(1)}s`} tone="yellow" />
         </div>
       </div>
 
@@ -141,7 +141,8 @@ export function TrackTimelinePanel({ state, language }: { state: DeltaDashMatchS
         <div className="rounded-[2rem] border border-white/10 bg-slate-950/45 p-4">
           <p className="text-xs font-black uppercase tracking-[0.24em] text-cyan-200">{language === 'en' ? 'Track telemetry' : '赛道遥测'}</p>
           <div className="mt-4 space-y-3">
-                        <TelemetryBar label={language === 'en' ? 'Tyre stress' : '轮胎压力'} value={`${trackStats.tyreStressPercent}%`} percent={trackStats.tyreStressPercent} />
+            <TelemetryBar label={language === 'en' ? 'Tyre stress' : '轮胎压力'} value={`${trackStats.tyreStressPercent}%`} percent={trackStats.tyreStressPercent} />
+            <TelemetryBar label={language === 'en' ? 'Wet track' : '赛道湿度'} value={`${trackStats.trackWetnessPercent}%`} percent={trackStats.trackWetnessPercent} />
             <TelemetryBar label={language === 'en' ? 'Rain intensity' : '雨强'} value={`${trackStats.rainMm.toFixed(1)}mm`} percent={Math.min(100, trackStats.rainMm * 20)} />
           </div>
           <div className="mt-4 rounded-2xl border border-orange-300/20 bg-orange-400/10 p-3">
@@ -149,14 +150,38 @@ export function TrackTimelinePanel({ state, language }: { state: DeltaDashMatchS
             <p className="mt-1 text-sm font-black text-white">{tyreCurveCopy}</p>
             <p className="mt-2 text-xs leading-5 text-orange-50/75">
               {language === 'en'
-                ? 'The UI is now prepared for continuous tyre wear instead of discrete casework.'
-                : '界面已准备接入连续轮胎磨损曲线，而不是离散档位。'}
+                ? `Base wear/lap ${trackStats.tyreWearLabel}. Degradation starts near ${trackStats.degradationCurveLabel}.`
+                : `单圈基础磨损 ${trackStats.tyreWearLabel}。性能衰退约从 ${trackStats.degradationCurveLabel} 开始。`}
+            </p>
+            <p className="mt-2 text-xs leading-5 text-orange-50/75">
+              {language === 'en'
+                ? `${formatTemperature(trackStats.temperatureLabel, language)} session · dry grip ${trackStats.drySurfaceGripPercent}% · ${trackStats.skyLabel === 'clear' ? 'rain locked out for this race.' : 'weather changes gradually between rounds.'}`
+                : `${formatTemperature(trackStats.temperatureLabel, language)}赛段 · 干地抓地 ${trackStats.drySurfaceGripPercent}% · ${trackStats.skyLabel === 'clear' ? '本场锁定无雨。' : '天气会在回合间缓慢变化。'}`}
             </p>
           </div>
         </div>
       </div>
     </section>
   );
+}
+
+function formatSky(sky: string, language: Language): string {
+  const labels = {
+    clear: { en: 'Clear', zh: '晴朗' },
+    cloudy: { en: 'Cloudy', zh: '多云' },
+    'light-rain': { en: 'Light rain', zh: '小雨' },
+    'steady-rain': { en: 'Steady rain', zh: '稳定降雨' },
+  } as const;
+  return labels[sky as keyof typeof labels]?.[language] ?? sky;
+}
+
+function formatTemperature(temperature: string, language: Language): string {
+  const labels = {
+    cool: { en: 'Cool', zh: '低温' },
+    mild: { en: 'Mild', zh: '温和' },
+    hot: { en: 'Hot', zh: '高温' },
+  } as const;
+  return labels[temperature as keyof typeof labels]?.[language] ?? temperature;
 }
 
 function TrackStat({ label, value, tone }: { label: string; value: string; tone: 'yellow' | 'cyan' | 'blue' | 'lime' }) {

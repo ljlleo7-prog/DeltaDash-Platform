@@ -1,6 +1,6 @@
 import type { Language } from '@/lib/i18n';
 import { deltaDashExplanationSlides } from '@/lib/deltadash/explanation-catalog';
-import type { DeltaDashEvent, DeltaDashStewardNote } from '@/lib/deltadash/types';
+import { DELTADASH_RESPONSE_WINDOW_SECONDS, type DeltaDashEvent, type DeltaDashStewardNote } from '@/lib/deltadash/types';
 import { EventLogPanel } from './event-log-panel';
 import { StewardPanel } from './steward-panel';
 
@@ -20,8 +20,8 @@ export function RaceControlPanel({
         <h3 className="mt-2 text-xl font-black text-white">{language === 'en' ? 'Hints & rules' : '提示与规则'}</h3>
         <p className="mt-2 text-xs leading-5 text-orange-50/80">
           {language === 'en'
-            ? 'Target ranges now use direct time gaps. A 1.5s card range means cars within 1.5 seconds of each other.'
-            : '目标范围现在直接使用时间差。1.5 秒卡牌范围表示彼此相差不超过 1.5 秒。'}
+            ? `Target ranges use direct time gaps. A 1.5s card range means cars within 1.5 seconds. Response cards have a ${DELTADASH_RESPONSE_WINDOW_SECONDS}s window after lock.`
+            : `目标范围使用直接时间差。1.5 秒卡牌范围表示彼此相差不超过 1.5 秒。响应牌在锁定后有 ${DELTADASH_RESPONSE_WINDOW_SECONDS} 秒窗口。`}
         </p>
         <div className="mt-3 flex gap-2 overflow-x-auto pb-1">
           {deltaDashExplanationSlides.map((slide) => (

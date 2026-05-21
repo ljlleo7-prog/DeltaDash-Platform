@@ -22,6 +22,7 @@ export function CardRailPanel({
   const pileCounts = humanCar ? getCardPileCounts(state, humanCar.id) : null;
   const playableCards = cards.filter((card) => card.definition.implementationStatus !== 'documented-only');
   const deploySlotsFull = queuedCardInstanceIds.length >= 3;
+  const controlsLocked = state.racePhase !== 'live' || humanCar?.pitState.status === 'servicing';
 
   return (
     <section className="h-full rounded-3xl border border-lime-300/25 bg-slate-950/45 shadow-[inset_0_1px_0_rgba(255,255,255,0.08)]">
@@ -35,6 +36,12 @@ export function CardRailPanel({
           <p className="text-sm leading-6 text-slate-300">{getFinishSummary(state)}</p>
         ) : humanCar?.retired ? (
           <p className="text-sm leading-6 text-red-100">{language === 'en' ? 'Your car has retired.' : '你的赛车已经退赛。'}</p>
+        ) : controlsLocked ? (
+          <p className="text-sm leading-6 text-slate-300">
+            {state.racePhase === 'preparation'
+              ? (language === 'en' ? 'Cards unlock after the race start.' : '比赛开始后解锁卡牌。')
+              : (language === 'en' ? 'Cards are locked during pit service.' : '维修区服务期间卡牌锁定。')}
+          </p>
         ) : (
           <>
             <p className="mb-3 text-xs leading-5 text-slate-400">

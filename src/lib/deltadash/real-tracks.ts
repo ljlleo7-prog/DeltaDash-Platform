@@ -1,3 +1,5 @@
+import type { DeltaDashClimate, DeltaDashSky, DeltaDashTemperatureBand } from './types';
+
 export type RealTrackSector = {
   startPercent: number;
   endPercent: number;
@@ -8,6 +10,13 @@ export type RealTrackData = {
   id: string;
   name: string;
   sectors: RealTrackSector[];
+  climate?: DeltaDashClimate;
+  canRain?: boolean;
+  defaultSky?: DeltaDashSky;
+  rainChance?: number;
+  temperatureBand?: DeltaDashTemperatureBand;
+  abrasionBias?: number;
+  gripBias?: number;
 };
 
 export const REAL_TRACKS: Record<string, RealTrackData> = {

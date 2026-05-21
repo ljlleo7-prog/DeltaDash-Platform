@@ -6,12 +6,12 @@ const actionCopy: Record<DeltaDashActionType, { zh: string; en: string; descript
   steady: {
     zh: '稳定推进',
     en: 'Steady',
-    description: { zh: '+1.5s，+1 电量，-1 轮胎。黄旗/限速下 +1.0s。', en: '+1.5s, +1 energy, -1 tire. +1.0s under yellow/speed cap.' },
+    description: { zh: '+1.5s，+1 电量，按胎种约 -4% 至 -9% 轮胎。黄旗/限速下 +1.0s。', en: '+1.5s, +1 energy, about -4% to -9% tire by compound. +1.0s under yellow/speed cap.' },
   },
   push: {
     zh: '强推',
     en: 'Push',
-    description: { zh: '+2.5s，-2 电量，-2 轮胎，增加事故风险。', en: '+2.5s, -2 energy, -2 tire, higher incident risk.' },
+    description: { zh: '+2.5s，-2 电量，轮胎磨损约为稳定推进的 1.35 倍，增加事故风险。', en: '+2.5s, -2 energy, about 1.35× steady tyre wear, higher incident risk.' },
   },
   defend: {
     zh: '防守',
@@ -21,7 +21,7 @@ const actionCopy: Record<DeltaDashActionType, { zh: string; en: string; descript
   recover: {
     zh: '回收',
     en: 'Recover',
-    description: { zh: '+0.5s，+2 电量，+1 轮胎。', en: '+0.5s, +2 energy, +1 tire.' },
+    description: { zh: '+0.5s，+2 电量，最多 +0.6% 轮胎冷却收益。', en: '+0.5s, +2 energy, up to +0.6% tyre cooling benefit.' },
   },
 };
 

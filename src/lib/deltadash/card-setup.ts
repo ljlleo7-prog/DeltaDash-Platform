@@ -5,11 +5,15 @@ import type { DeltaDashCar } from './types';
 export const DELTADASH_RACE_INIT = {
   seed: 2026,
   startingTimeDelta: 0,
-  startingEnergy: 3,
-  startingTire: 6,
-  startingFocus: 4,
-  focusCap: 8,
+  startingEnergy: 4,
+  maxEnergy: 4,
+  minGridEnergy: 2,
+  startingGridGap: 0.5,
+  startingTire: 100,
+  startingFocus: 6,
+  focusCap: 6,
   startingHandActions: 3,
+  startingHandTactics: 1,
   roundDrawActions: 1,
   roundDrawTactics: 1,
 } as const;
@@ -18,9 +22,11 @@ export function createInitialCardInstances(cars: DeltaDashCar[], seed: number = 
   return cars.flatMap((car) => {
     const actionDeck = createCategoryDeck(car, seed, 'action');
     const tacticDeck = createCategoryDeck(car, seed, 'tactic');
-    const openingHand = actionDeck.slice(0, DELTADASH_RACE_INIT.startingHandActions).map((card) => ({ ...card, zone: 'hand' as const }));
+    const openingActions = actionDeck.slice(0, DELTADASH_RACE_INIT.startingHandActions).map((card) => ({ ...card, zone: 'hand' as const }));
+    const openingTactics = tacticDeck.slice(0, DELTADASH_RACE_INIT.startingHandTactics).map((card) => ({ ...card, zone: 'hand' as const }));
     const remainingActions = actionDeck.slice(DELTADASH_RACE_INIT.startingHandActions);
-    return [...openingHand, ...remainingActions, ...tacticDeck].map((card) => ({
+    const remainingTactics = tacticDeck.slice(DELTADASH_RACE_INIT.startingHandTactics);
+    return [...openingActions, ...openingTactics, ...remainingActions, ...remainingTactics].map((card) => ({
       ...card,
       revealed: car.id !== 'car-human',
     }));
@@ -42,8 +48,7 @@ export function getDrawableCardInstanceIds(
   const definitionIds = new Set(definitions.map((def) => def.id));
 
   const deckCards = cards
-    .filter((card) => card.ownerCarId === carId && card.zone === 'deck' && definitionIds.has(card.definitionId))
-    .sort((a, b) => a.instanceId.localeCompare(b.instanceId));
+    .filter((card) => card.ownerCarId === carId && card.zone === 'deck' && definitionIds.has(card.definitionId));
 
   if (deckCards.length >= amount) {
     return { cardInstanceIds: deckCards.slice(0, amount).map((c) => c.instanceId), reshuffleInstanceIds: [] };
@@ -64,6 +69,7 @@ export function getDrawableCardInstanceIds(
     reshuffleInstanceIds: shuffled.map((c) => c.instanceId),
   };
 }
+
 
 function createCategoryDeck(car: DeltaDashCar, seed: number, category: 'action' | 'tactic'): DeltaDashCardInstance[] {
   const definitions = getRuntimePlayableCards().filter((def) => def.category === category);

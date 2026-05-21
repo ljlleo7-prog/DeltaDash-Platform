@@ -85,8 +85,14 @@ export type DeltaDashTrackStats = {
   roundLabel: string;
   rainMm: number;
   surfaceGripPercent: number;
+  drySurfaceGripPercent: number;
+  trackWetnessPercent: number;
   tyreStressPercent: number;
   tyreCurveLabel: 'gentle' | 'balanced' | 'aggressive';
+  skyLabel: string;
+  temperatureLabel: string;
+  tyreWearLabel: string;
+  degradationCurveLabel: string;
 };
 
 export function getTrackStats(state: DeltaDashMatchState): DeltaDashTrackStats {
@@ -97,8 +103,14 @@ export function getTrackStats(state: DeltaDashMatchState): DeltaDashTrackStats {
     roundLabel: `${state.round}/${state.track.maxRounds ?? 12}`,
     rainMm: state.track.rainMm ?? 0,
     surfaceGripPercent: Math.round((state.track.surfaceGrip ?? 1) * 100),
+    drySurfaceGripPercent: Math.round((state.track.drySurfaceGrip ?? state.track.surfaceGrip ?? 1) * 100),
+    trackWetnessPercent: Math.round((state.track.weather?.trackWetness ?? 0) * 100),
     tyreStressPercent: Math.round(tyreStress * 100),
     tyreCurveLabel: tyreStress >= 0.72 ? 'aggressive' : tyreStress >= 0.45 ? 'balanced' : 'gentle',
+    skyLabel: state.track.weather?.sky ?? 'clear',
+    temperatureLabel: state.track.weather?.temperatureBand ?? 'mild',
+    tyreWearLabel: `S ${state.track.tyreCurve.baseWear.soft.toFixed(1)} / M ${state.track.tyreCurve.baseWear.medium.toFixed(1)} / H ${state.track.tyreCurve.baseWear.hard.toFixed(1)} / I ${state.track.tyreCurve.baseWear.intermediate.toFixed(1)} / W ${state.track.tyreCurve.baseWear.wet.toFixed(1)}%`,
+    degradationCurveLabel: `${state.track.tyreCurve.degradationStartPercent}% → -${state.track.tyreCurve.maxPaceLoss.toFixed(1)}s`,
   };
 }
 

@@ -41,7 +41,7 @@ export function ClassificationList({
                     <p className="text-xs text-slate-500">{owner?.kind === 'human' ? (language === 'en' ? 'Human' : '玩家') : (language === 'en' ? 'Bot' : '机器人')}</p>
                   </div>
                   <div className="text-right text-xs text-slate-300">
-                    <p>{language === 'en' ? 'Energy' : '电量'} {car.energy}/6 · {language === 'en' ? 'Tire' : '轮胎'} {car.tire}/6</p>
+                    <p>{language === 'en' ? 'Energy' : '电量'} {car.energy}/4 · {language === 'en' ? 'Tire' : '轮胎'} {Math.round(car.tire)}%</p>
                     <p>{language === 'en' ? 'Focus' : '专注'} {car.focus ?? 0}/{car.focusCap ?? 8}</p>
                     <p>{language === 'en' ? 'Last' : '上回合'}: {car.lastAction ?? '-'}</p>
                   </div>

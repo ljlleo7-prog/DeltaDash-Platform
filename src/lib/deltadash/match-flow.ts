@@ -1,12 +1,13 @@
-import { chooseBotCardIds } from './bot-policy';
+import { chooseBotCardPlays, chooseBotPitService, chooseBotStartingTyre } from './bot-policy';
 import { DELTADASH_RACE_INIT, getDrawableCardInstanceIds } from './card-setup';
 import { resolveCardEffects } from './card-resolution';
 import { getCardDefinitionById } from './playable-card-catalog';
-import { projectDeltaDashEvents, resolveAction } from './reducer';
+import { advanceWeather, getWeatherSurfaceGrip, projectDeltaDashEvents, resolveAction } from './reducer';
 import { getHumanCar, getMissingCommitmentCarIds, isMatchFinished } from './selectors';
 import { runStewardReview } from './steward-policy';
-import { getDefaultTargetCarIds, normalizeTargetCarIds } from './targeting';
+import { normalizeTargetCarIds } from './targeting';
 import type { DeltaDashActionCommitment, DeltaDashCar, DeltaDashEvent, DeltaDashMatchState, DeltaDashResolvedAction } from './types';
+import { DELTADASH_RESPONSE_WINDOW_SECONDS } from './types';
 
 export type DeltaDashCardPlayInput = {
   cardDefinitionId: string;
@@ -25,47 +26,108 @@ export function removeDeployedCard(events: DeltaDashEvent[], cardInstanceId: str
     cardInstanceId,
     zone: 'discard',
     revealed: true,
-    clearRoundModifiers: card.definitionId === 'tactic.steadfast-lion' ? ['steadfast-defense'] : [],
+    clearRoundModifiers: card.definitionId === 'tactic.steadfast-lion' ? ['steadfast-defense', 'position-lock'] : [],
   }];
 }
 
-const MAX_CARD_PLAYS_PER_ROUND = 3;
+export type DeltaDashPitServiceInput = {
+  compound?: DeltaDashCar['tyreState']['compound'];
+  repairSelected?: boolean;
+};
 
-export function advanceLocalMatch(events: DeltaDashEvent[], humanCardPlays: DeltaDashCardPlayInput[]): DeltaDashEvent[] {
+export function createRaceStartEvents(events: DeltaDashEvent[]): DeltaDashEvent[] {
   const state = projectDeltaDashEvents(events);
-  if (!state || state.phase === 'finished') return [];
+  if (!state || state.racePhase !== 'preparation') return [];
+
+  const botTyreEvents: DeltaDashEvent[] = state.players
+    .filter((player) => player.kind === 'bot')
+    .flatMap((player) => {
+      const car = state.cars.find((candidate) => candidate.id === player.carId);
+      if (!car || car.retired) return [];
+      return [{ type: 'TYRE_SELECTED' as const, round: state.round, carId: car.id, compound: chooseBotStartingTyre(state) }];
+    });
+
+  return [...botTyreEvents, { type: 'RACE_STARTED', round: state.round }];
+}
+
+export function enterPitLane(events: DeltaDashEvent[], carId: string): DeltaDashEvent[] {
+  const state = projectDeltaDashEvents(events);
+  const car = state?.cars.find((candidate) => candidate.id === carId);
+  if (!state || !car || state.racePhase !== 'live' || state.phase !== 'planning' || car.pitState.status !== 'none') return [];
+  return [{ type: 'PIT_ENTRY_REQUESTED', round: state.round, carId }];
+}
+
+export function updatePitService(events: DeltaDashEvent[], carId: string, service: DeltaDashPitServiceInput): DeltaDashEvent[] {
+  const state = projectDeltaDashEvents(events);
+  const car = state?.cars.find((candidate) => candidate.id === carId);
+  if (!state || !car || car.pitState.status !== 'servicing') return [];
+  return [{ type: 'PIT_SERVICE_SELECTED', round: state.round, carId, compound: service.compound ?? car.pitState.pendingCompound ?? car.tyreState.compound, repairSelected: Boolean(service.repairSelected) }];
+}
+
+export function exitPitLaneAndAdvance(events: DeltaDashEvent[], carId: string): DeltaDashEvent[] {
+  const state = projectDeltaDashEvents(events);
+  const car = state?.cars.find((candidate) => candidate.id === carId);
+  if (!state || !car || car.pitState.status !== 'servicing') return [];
+  return advanceLocalMatch(events, [], [{ type: 'PIT_EXITED', round: state.round, carId }]);
+}
+
+const MAX_CARD_PLAYS_PER_ROUND = 3;
+const TIME_DELTA_NOISE_SECONDS = 0.12;
+
+export function advanceLocalMatch(events: DeltaDashEvent[], humanCardPlays: DeltaDashCardPlayInput[], leadingEvents: DeltaDashEvent[] = []): DeltaDashEvent[] {
+  const initialEvents = [...events, ...leadingEvents];
+  const state = projectDeltaDashEvents(initialEvents);
+  if (!state || state.phase === 'finished' || state.racePhase !== 'live') return [];
 
   const humanCar = getHumanCar(state);
   if (!humanCar || humanCar.retired) return [];
 
-  const humanEvents = createCardPlayEvents(state, humanCar.id, humanCardPlays.slice(0, MAX_CARD_PLAYS_PER_ROUND));
+  const humanEvents = humanCar.pitState.status === 'servicing'
+    ? []
+    : createCardPlayEvents(state, humanCar.id, humanCardPlays.slice(0, MAX_CARD_PLAYS_PER_ROUND));
   if (!humanEvents) return [];
 
-  const stateAfterHuman = projectDeltaDashEvents([...events, ...humanEvents]);
+  const stateAfterHuman = projectDeltaDashEvents([...initialEvents, ...humanEvents]);
   if (!stateAfterHuman) return [];
 
-  const botEvents: DeltaDashEvent[] = stateAfterHuman.players
+  const botPitEvents: DeltaDashEvent[] = stateAfterHuman.players
     .filter((player) => player.kind === 'bot')
     .flatMap((player) => {
       const car = stateAfterHuman.cars.find((candidate) => candidate.id === player.carId);
-      if (!car || car.retired) return [];
-
-      const botPlays = chooseBotCardIds(stateAfterHuman, car, MAX_CARD_PLAYS_PER_ROUND).flatMap((cardDefinitionId) => {
-        const card = getCardDefinitionById(cardDefinitionId);
-        return card ? [{ cardDefinitionId, targetCarIds: getDefaultTargetCarIds(stateAfterHuman, car, card) }] : [];
-      });
-
-      return createCardPlayEvents(stateAfterHuman, car.id, botPlays) ?? [];
+      if (!car) return [];
+      const service = chooseBotPitService(stateAfterHuman, car);
+      if (!service) return [];
+      return [
+        { type: 'PIT_ENTRY_REQUESTED' as const, round: stateAfterHuman.round, carId: car.id },
+        { type: 'PIT_SERVICE_SELECTED' as const, round: stateAfterHuman.round, carId: car.id, compound: service.compound, repairSelected: service.repairSelected },
+        { type: 'PIT_EXITED' as const, round: stateAfterHuman.round, carId: car.id },
+      ];
     });
 
-  const committedEvents = [...humanEvents, ...botEvents];
+  const stateAfterBotPits = projectDeltaDashEvents([...initialEvents, ...humanEvents, ...botPitEvents]);
+  if (!stateAfterBotPits) return [];
+
+  const botEvents: DeltaDashEvent[] = stateAfterBotPits.players
+    .filter((player) => player.kind === 'bot')
+    .flatMap((player) => {
+      const car = stateAfterBotPits.cars.find((candidate) => candidate.id === player.carId);
+      if (!car || car.retired) return [];
+      if (botPitEvents.some((event) => event.type === 'PIT_EXITED' && event.carId === car.id)) return [];
+
+      const botPlays = chooseBotCardPlays(stateAfterBotPits, car, MAX_CARD_PLAYS_PER_ROUND);
+
+      return createCardPlayEvents(stateAfterBotPits, car.id, botPlays) ?? [];
+    });
+
+  const committedEvents = [...leadingEvents, ...humanEvents, ...botPitEvents, ...botEvents];
   const committedState = projectDeltaDashEvents([...events, ...committedEvents]);
   if (!committedState || getMissingCommitmentCarIds(committedState).length) return committedEvents;
 
   const cardMechanicEvents = createCardMechanicEvents(committedState);
-  const results = applyResultGuards(committedState, committedState.commitments.flatMap((commitment) => resolveCommitment(committedState, commitment)));
+  const orderedCommitments = orderCommitmentsByPriority(committedState, committedState.commitments);
+  const results = applyResultGuards(committedState, orderedCommitments.flatMap((commitment) => resolveCommitment(committedState, commitment)));
 
-  const lockedEvent: DeltaDashEvent = { type: 'COMMITMENTS_LOCKED', round: committedState.round };
+  const lockedEvent: DeltaDashEvent = { type: 'COMMITMENTS_LOCKED', round: committedState.round, responseWindowSeconds: DELTADASH_RESPONSE_WINDOW_SECONDS };
   const resolvedEvent: DeltaDashEvent = { type: 'ACTIONS_RESOLVED', round: committedState.round, results };
   const cardResolutionEvents: DeltaDashEvent[] = committedState.commitments.flatMap((commitment) => commitment.cardDefinitionId ? [{
     type: 'CARD_RESOLVED' as const,
@@ -162,11 +224,32 @@ function createExchangeHandEvents(state: DeltaDashMatchState, car: DeltaDashCar,
   return [...removedEvents, ...actionDraw, ...tacticDraw];
 }
 
+function orderCommitmentsByPriority(state: DeltaDashMatchState, commitments: DeltaDashActionCommitment[]): DeltaDashActionCommitment[] {
+  return [...commitments].sort((left, right) => getCommitmentPriority(right) - getCommitmentPriority(left) || getCarOrder(state, left.carId) - getCarOrder(state, right.carId));
+}
+
+function getCommitmentPriority(commitment: DeltaDashActionCommitment): number {
+  const card = commitment.cardDefinitionId ? getCardDefinitionById(commitment.cardDefinitionId) : null;
+  if (!card) {
+    return {
+      push: 5,
+      steady: 3,
+      defend: 2,
+      recover: 1,
+    }[commitment.action];
+  }
+  return card.priority === 'X' ? 7 : card.priority;
+}
+
+function getCarOrder(state: DeltaDashMatchState, carId: string): number {
+  return state.cars.findIndex((car) => car.id === carId);
+}
+
 function resolveCommitment(state: DeltaDashMatchState, commitment: DeltaDashActionCommitment): DeltaDashResolvedAction[] {
   const car = state.cars.find((candidate) => candidate.id === commitment.carId);
   const card = commitment.cardDefinitionId ? getCardDefinitionById(commitment.cardDefinitionId) : null;
   if (!car || car.retired) return [];
-  if (!card) return car.roundModifiers.includes('steadfast-defense') || car.roundModifiers.includes('no-normal-release') ? [] : [resolveAction(car, commitment.action, state.flag === 'yellow')];
+  if (!card) return car.roundModifiers.includes('steadfast-defense') || car.roundModifiers.includes('no-normal-release') ? [] : [resolveAction(car, commitment.action, state.track, state.flag === 'yellow')];
 
   switch (card.id) {
     case 'action.attack':
@@ -216,7 +299,9 @@ function resolveDefaultCardCommitment(state: DeltaDashMatchState, commitment: De
 }
 
 function resolveAttack(state: DeltaDashMatchState, car: DeltaDashCar, cardDefinitionId: string, requestedTargetCarIds: string[]): DeltaDashResolvedAction[] {
-  const target = state.cars.find((candidate) => candidate.id === requestedTargetCarIds[0] && candidate.id !== car.id && !candidate.retired);
+  const card = getCardDefinitionById(cardDefinitionId);
+  const targetCarIds = card ? normalizeTargetCarIds(state, car, card, requestedTargetCarIds) : null;
+  const target = targetCarIds ? state.cars.find((candidate) => candidate.id === targetCarIds[0] && candidate.id !== car.id && !candidate.retired) : null;
   if (!target) return [];
   return [
     createResult(car, car, cardDefinitionId, { action: 'push', timeDeltaChange: 0.5 }),
@@ -354,7 +439,41 @@ function createResult(sourceCar: DeltaDashCar, targetCar: DeltaDashCar, cardDefi
 }
 
 function applyResultGuards(state: DeltaDashMatchState, results: DeltaDashResolvedAction[]): DeltaDashResolvedAction[] {
-  return applyDefendShields(applySteadfastDefense(state, applyCounteredResults(results)));
+  const noisyResults = applyResolutionNoise(state, results);
+  return enforcePositionLocks(state, applyDefendShields(applySteadfastDefense(state, applyCounteredResults(noisyResults))));
+}
+
+function applyResolutionNoise(state: DeltaDashMatchState, results: DeltaDashResolvedAction[]): DeltaDashResolvedAction[] {
+  return results.map((result) => {
+    if (!result.timeDeltaChange) return result;
+    const noise = deterministicNoise(`${state.id}:${state.seed}:${state.round}:${result.sourceCarId ?? result.carId}:${result.carId}:${result.cardDefinitionId ?? result.action}`) * TIME_DELTA_NOISE_SECONDS * 2 - TIME_DELTA_NOISE_SECONDS;
+    const timeDeltaChange = Math.round((result.timeDeltaChange + noise) * 100) / 100;
+    return { ...result, timeDeltaChange };
+  });
+}
+
+function deterministicNoise(input: string): number {
+  let hash = 2166136261;
+  for (let index = 0; index < input.length; index += 1) {
+    hash ^= input.charCodeAt(index);
+    hash = Math.imul(hash, 16777619);
+  }
+  return (hash >>> 0) / 4294967295;
+}
+
+function enforcePositionLocks(state: DeltaDashMatchState, results: DeltaDashResolvedAction[]): DeltaDashResolvedAction[] {
+  return results.map((result) => {
+    if (!result.timeDeltaChange || result.timeDeltaChange <= 0) return result;
+    const targetCar = state.cars.find((car) => car.id === result.carId);
+    if (!targetCar) return result;
+
+    const lockedCar = state.cars
+      .filter((car) => car.id !== targetCar.id && !car.retired && car.roundModifiers.includes('position-lock'))
+      .filter((car) => targetCar.timeDelta < car.timeDelta && targetCar.timeDelta + result.timeDeltaChange >= car.timeDelta)
+      .sort((left, right) => left.timeDelta - right.timeDelta)[0];
+
+    return lockedCar ? { ...result, timeDeltaChange: Math.max(0, lockedCar.timeDelta - targetCar.timeDelta - 0.1), roundModifiers: [...(result.roundModifiers ?? []), `blocked-by-lock:${lockedCar.id}`] } : result;
+  });
 }
 
 function applyDefendShields(results: DeltaDashResolvedAction[]): DeltaDashResolvedAction[] {
@@ -377,21 +496,45 @@ function applyCounteredResults(results: DeltaDashResolvedAction[]): DeltaDashRes
 
 function createNextRoundEvents(state: NonNullable<ReturnType<typeof projectDeltaDashEvents>>): DeltaDashEvent[] {
   const nextRound = state.round + 1;
+  const nextWeather = advanceWeather(state.track, nextRound, state.seed);
+  const weatherEvent: DeltaDashEvent = {
+    type: 'WEATHER_UPDATED',
+    round: nextRound,
+    weather: nextWeather,
+    surfaceGrip: getWeatherSurfaceGrip(state.track, nextWeather),
+    rainMm: nextWeather.rainIntensity * 8,
+  };
+
+  const preparationEvents: DeltaDashEvent[] = state.cars.flatMap((car) => {
+    if (car.retired) return [];
+    const actionDraw = getDrawableCardInstanceIds(state.cards, car.id, 'action', DELTADASH_RACE_INIT.roundDrawActions, nextRound);
+    const tacticDraw = getDrawableCardInstanceIds(state.cards, car.id, 'tactic', DELTADASH_RACE_INIT.roundDrawTactics, nextRound);
+
+    const reshuffleEvents: DeltaDashEvent[] = [
+      ...actionDraw.reshuffleInstanceIds.map((cardInstanceId) => ({ type: 'CARD_MOVED' as const, round: nextRound, cardInstanceId, zone: 'deck' as const, revealed: car.id !== 'car-human' })),
+      ...tacticDraw.reshuffleInstanceIds.map((cardInstanceId) => ({ type: 'CARD_MOVED' as const, round: nextRound, cardInstanceId, zone: 'deck' as const, revealed: car.id !== 'car-human' })),
+    ];
+
+    const cardInstanceIds = [...actionDraw.cardInstanceIds, ...tacticDraw.cardInstanceIds];
+    return [...reshuffleEvents, ...(cardInstanceIds.length ? [{ type: 'CARDS_DRAWN' as const, round: nextRound, carId: car.id, cardInstanceIds }] : [])];
+  });
+  const dataUpdateEvent: DeltaDashEvent = {
+    type: 'DATA_UPDATE_APPLIED',
+    round: nextRound,
+    updates: {
+      lastRound: nextRound,
+      preparationApplied: true,
+      rankingUpdated: true,
+      incidentsChecked: false,
+      pitChecked: true,
+    },
+  };
+
   return [
+    weatherEvent,
     { type: 'ROUND_STARTED', round: nextRound },
-    ...state.cars.flatMap((car) => {
-      if (car.retired) return [];
-      const actionDraw = getDrawableCardInstanceIds(state.cards, car.id, 'action', DELTADASH_RACE_INIT.roundDrawActions, nextRound);
-      const tacticDraw = getDrawableCardInstanceIds(state.cards, car.id, 'tactic', DELTADASH_RACE_INIT.roundDrawTactics, nextRound);
-
-      const reshuffleEvents: DeltaDashEvent[] = [
-        ...actionDraw.reshuffleInstanceIds.map((cardInstanceId) => ({ type: 'CARD_MOVED' as const, round: nextRound, cardInstanceId, zone: 'deck' as const, revealed: car.id !== 'car-human' })),
-        ...tacticDraw.reshuffleInstanceIds.map((cardInstanceId) => ({ type: 'CARD_MOVED' as const, round: nextRound, cardInstanceId, zone: 'deck' as const, revealed: car.id !== 'car-human' })),
-      ];
-
-      const cardInstanceIds = [...actionDraw.cardInstanceIds, ...tacticDraw.cardInstanceIds];
-      return [...reshuffleEvents, ...(cardInstanceIds.length ? [{ type: 'CARDS_DRAWN' as const, round: nextRound, carId: car.id, cardInstanceIds }] : [])];
-    }),
+    ...preparationEvents,
+    dataUpdateEvent,
   ];
 }
 

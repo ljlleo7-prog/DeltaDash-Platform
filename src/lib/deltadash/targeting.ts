@@ -16,6 +16,13 @@ export function getValidTargetCars(state: DeltaDashMatchState, sourceCar: DeltaD
     return state.cars.filter((car) => car.id !== sourceCar.id && !car.retired && tacticCommitments.has(car.id));
   }
 
+  if (card.id === 'action.attack') {
+    const targetAhead = state.cars
+      .filter((car) => car.id !== sourceCar.id && !car.retired && isTargetInRange(sourceCar, car, card))
+      .sort((left, right) => left.timeDelta - right.timeDelta)[0];
+    return targetAhead ? [targetAhead] : [];
+  }
+
   switch (card.targeting.kind) {
     case 'self':
       return isTargetInRange(sourceCar, sourceCar, card) ? [sourceCar] : [];

@@ -33,11 +33,12 @@ export function PlayCockpitLayout({
           {standings}
           {raceControl}
         </aside>
-        <main className="min-w-0 overflow-hidden">{timeline}</main>
+        <main className="min-w-0 space-y-4 overflow-hidden">
+          {timeline}
+          {driverConsole}
+        </main>
         <aside className="min-w-0 space-y-4">{cardRail}</aside>
       </div>
-
-      <div className="mt-4">{driverConsole}</div>
     </section>
   );
 }

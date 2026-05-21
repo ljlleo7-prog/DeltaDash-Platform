@@ -6,6 +6,7 @@ import type { DeltaDashCardPlayInput } from '@/lib/deltadash/match-flow';
 import { getCarTimeOffset } from '@/lib/deltadash/selectors';
 import type { DeltaDashCar } from '@/lib/deltadash/types';
 import { getTimeGap } from '@/lib/deltadash/targeting';
+import { getCardCategoryAccentTextClass, getCardCategoryBadgeClass, getCardCategoryFrameClass, getCardCategoryLabel, getCardCategoryMutedTextClass, getCardCategoryTextClass, getCardPriorityClass } from './card-visual-style';
 
 type DeploySlotView = {
   slot: DeltaDashCardPlayInput | null;
@@ -88,8 +89,8 @@ export function CardDeployPanel({
             <p className="text-xs font-black uppercase tracking-[0.22em] text-slate-300">{language === 'en' ? 'Persistent cards' : '持续卡牌'}</p>
             <div className="mt-3 flex flex-wrap gap-2">
               {deployedCards.map((card) => (
-                <button key={card.instance.instanceId} type="button" onClick={() => onRemoveDeployedCard(card.instance.instanceId)} className="rounded-full border border-orange-300/25 bg-orange-400/10 px-3 py-2 text-xs font-black uppercase tracking-[0.12em] text-orange-100 transition hover:bg-orange-300 hover:text-slate-950">
-                  {language === 'en' ? 'Remove' : '移除'} · {localize(card.definition.name, language)}
+                <button key={card.instance.instanceId} type="button" onClick={() => onRemoveDeployedCard(card.instance.instanceId)} className={`rounded-full border px-3 py-2 text-xs font-black uppercase tracking-[0.12em] transition hover:brightness-125 ${getCardCategoryBadgeClass(card.definition.category)}`}>
+                  {language === 'en' ? 'Remove' : '移除'} · {localize(card.definition.name, language)} · P{card.definition.priority}
                 </button>
               ))}
             </div>
@@ -98,9 +99,14 @@ export function CardDeployPanel({
       </div>
 
       <div className="mt-4 grid grid-cols-3 gap-2 text-center text-xs">
-        <TelemetryTile label={language === 'en' ? 'Energy' : '电量'} value={sourceCar ? `${sourceCar.energy}/6` : '-'} tone="cyan" />
-        <TelemetryTile label={language === 'en' ? 'Tire' : '轮胎'} value={sourceCar ? `${sourceCar.tire}/6` : '-'} tone="lime" />
+        <TelemetryTile label={language === 'en' ? 'Energy' : '电量'} value={sourceCar ? `${sourceCar.energy}/4` : '-'} tone="cyan" />
+        <TelemetryTile label={language === 'en' ? 'Tire' : '轮胎'} value={sourceCar ? `${Math.round(sourceCar.tire)}%` : '-'} tone="lime" />
         <TelemetryTile label={language === 'en' ? 'Focus' : '专注'} value={sourceCar ? `${sourceCar.focus ?? 0}/${sourceCar.focusCap ?? 8}` : '-'} tone="orange" />
+      </div>
+      <div className="mt-2 grid grid-cols-3 gap-2 text-center text-xs">
+        <TelemetryTile label={language === 'en' ? 'Compound' : '胎种'} value={sourceCar ? `${sourceCar.tyreState.compound} · ${sourceCar.tyreState.age}` : '-'} tone="lime" />
+        <TelemetryTile label={language === 'en' ? 'Pit' : '进站'} value={sourceCar ? `${sourceCar.pitState.status} · ${sourceCar.pitState.stops}` : '-'} tone="cyan" />
+        <TelemetryTile label={language === 'en' ? 'Race mod' : '正赛'} value={sourceCar ? `${sourceCar.driverStats.raceModifier >= 0 ? '+' : ''}${sourceCar.driverStats.raceModifier}` : '-'} tone="orange" />
       </div>
     </section>
   );
@@ -124,7 +130,7 @@ function DeploySlotCard({
   const { card, validTargets, selectedTargetCarIds } = slot;
 
   return (
-    <div className={`min-h-[180px] rounded-3xl border p-4 ${card ? 'border-yellow-200/35 bg-yellow-300/10' : 'border-dashed border-white/15 bg-black/20'}`}>
+    <div className={`min-h-[180px] rounded-3xl border p-4 ${card ? getCardCategoryFrameClass(card.definition.category) : 'border-dashed border-white/15 bg-black/20'}`}>
       <div className="flex items-center justify-between gap-2">
         <p className="text-[0.65rem] font-black uppercase tracking-[0.2em] text-yellow-100">{language === 'en' ? `Slot ${index + 1}` : `卡槽 ${index + 1}`}</p>
         {card ? (
@@ -137,11 +143,15 @@ function DeploySlotCard({
       {card ? (
         <div className="mt-3 space-y-3">
           <div>
-            <p className="text-sm font-black text-white">{localize(card.definition.name, language)}</p>
-            <p className="mt-1 text-xs leading-5 text-slate-300">{localize(card.definition.summary, language)}</p>
+            <p className={`text-sm font-black ${getCardCategoryTextClass(card.definition.category)}`}>{localize(card.definition.name, language)}</p>
+            <div className="mt-2 flex flex-wrap gap-2 text-[0.62rem] font-black uppercase tracking-[0.16em]">
+              <span className={`rounded-full border px-2.5 py-1 ${getCardCategoryBadgeClass(card.definition.category)}`}>{getCardCategoryLabel(card.definition.category, language)}</span>
+              <span className={`rounded-full border px-2.5 py-1 ${getCardPriorityClass(card.definition.priority)}`}>P{card.definition.priority}</span>
+            </div>
+            <p className={`mt-2 text-xs leading-5 ${getCardCategoryMutedTextClass(card.definition.category)}`}>{localize(card.definition.summary, language)}</p>
           </div>
           {card.definition.targeting.range ? (
-            <p className="text-[0.65rem] uppercase tracking-[0.18em] text-cyan-200">
+            <p className={`text-[0.65rem] uppercase tracking-[0.18em] ${getCardCategoryAccentTextClass(card.definition.category)}`}>
               {language === 'en' ? 'Window' : '窗口'} ≤ {card.definition.targeting.range.maxTimeGap ?? '∞'}s
             </p>
           ) : null}

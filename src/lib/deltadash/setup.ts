@@ -1,10 +1,13 @@
 import { createInitialCardInstances, DELTADASH_RACE_INIT } from './card-setup';
 import { prototypeDrivers } from './driver-catalog';
 import { createDeltaDashTrack, DEFAULT_REAL_TRACK_ID } from './track-catalog';
-import type { DeltaDashEvent, DeltaDashMatchState } from './types';
+import type { DeltaDashCar, DeltaDashEvent, DeltaDashMatchState } from './types';
 
-export function createInitialMatchEvent(trackKey = DEFAULT_REAL_TRACK_ID): DeltaDashEvent {
-  const players = prototypeDrivers.map((driver, index) => {
+export const DELTADASH_PLAYER_COUNT_OPTIONS = prototypeDrivers.map((_, index) => index + 1).filter((count) => count >= 2);
+
+export function createInitialMatchEvent(trackKey = DEFAULT_REAL_TRACK_ID, playerCount = 4): DeltaDashEvent {
+  const selectedDrivers = prototypeDrivers.slice(0, clampPlayerCount(playerCount));
+  const players = selectedDrivers.map((driver, index) => {
     const isHuman = index === 0;
     return {
       id: isHuman ? 'player-human' : `player-bot-${index}`,
@@ -13,30 +16,57 @@ export function createInitialMatchEvent(trackKey = DEFAULT_REAL_TRACK_ID): Delta
       carId: isHuman ? 'car-human' : `car-bot-${index}`,
     };
   });
-  const cars = prototypeDrivers.map((driver, index) => {
-    const isHuman = index === 0;
-    return createCar(isHuman ? 'car-human' : `car-bot-${index}`, isHuman ? 'player-human' : `player-bot-${index}`, driver.id, driver.carName);
-  });
+  const cars = selectedDrivers
+    .map((driver, index) => {
+      const isHuman = index === 0;
+      return createCar(isHuman ? 'car-human' : `car-bot-${index}`, isHuman ? 'player-human' : `player-bot-${index}`, driver.id, driver.carName);
+    })
+    .sort((left, right) => right.driverStats.qualifyingModifier - left.driverStats.qualifyingModifier || left.id.localeCompare(right.id))
+    .map((car, gridIndex, grid) => ({
+      ...car,
+      timeDelta: -DELTADASH_RACE_INIT.startingGridGap * (gridIndex + 1),
+      energy: getGridStartEnergy(gridIndex, grid.length),
+    }));
 
   const match: DeltaDashMatchState = {
     id: `local-${Date.now()}`,
     seed: DELTADASH_RACE_INIT.seed,
     round: 1,
     phase: 'planning',
-    track: createDeltaDashTrack(trackKey),
+    racePhase: 'preparation',
+    track: createDeltaDashTrack(trackKey, DELTADASH_RACE_INIT.seed),
     flag: 'green',
     players,
     cars,
     cards: createInitialCardInstances(cars, DELTADASH_RACE_INIT.seed),
     commitments: [],
     stewardNotes: [],
+    dataUpdate: {
+      lastRound: 1,
+      preparationApplied: true,
+      rankingUpdated: true,
+      incidentsChecked: false,
+      pitChecked: false,
+    },
     finishedAtRound: null,
   };
 
   return { type: 'MATCH_CREATED', match };
 }
 
-function createCar(id: string, playerId: string, driverId: string, name: string) {
+function clampPlayerCount(playerCount: number): number {
+  return Math.min(prototypeDrivers.length, Math.max(2, Math.floor(playerCount)));
+}
+
+function getGridStartEnergy(gridIndex: number, gridSize: number): number {
+  if (gridSize <= 1) return DELTADASH_RACE_INIT.maxEnergy;
+  return Math.round((DELTADASH_RACE_INIT.minGridEnergy + ((gridIndex / (gridSize - 1)) * (DELTADASH_RACE_INIT.maxEnergy - DELTADASH_RACE_INIT.minGridEnergy))) * 10) / 10;
+}
+
+function createCar(id: string, playerId: string, driverId: string, name: string): DeltaDashCar {
+  const driver = prototypeDrivers.find((candidate) => candidate.id === driverId);
+  const driverStats = driver?.stats ?? { raceModifier: 0, qualifyingModifier: 0, focusCap: DELTADASH_RACE_INIT.focusCap, ability: 'Prototype' };
+
   return {
     id,
     playerId,
@@ -45,12 +75,15 @@ function createCar(id: string, playerId: string, driverId: string, name: string)
     timeDelta: DELTADASH_RACE_INIT.startingTimeDelta,
     energy: DELTADASH_RACE_INIT.startingEnergy,
     tire: DELTADASH_RACE_INIT.startingTire,
-    focus: DELTADASH_RACE_INIT.startingFocus,
-    focusCap: DELTADASH_RACE_INIT.focusCap,
+    focus: driverStats.focusCap,
+    focusCap: driverStats.focusCap,
     warnings: 0,
     penalties: [],
     roundModifiers: [],
-    lastAction: null,
+    lastAction: 'steady',
     retired: false,
+    driverStats,
+    tyreState: { compound: 'medium', age: 0 },
+    pitState: { status: 'none', stops: 0, cooldown: 0 },
   };
 }

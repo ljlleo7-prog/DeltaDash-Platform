@@ -3,6 +3,7 @@ import { localize } from '@/lib/i18n';
 import type { DeltaDashPlayableCard } from '@/lib/deltadash/card-selectors';
 import type { DeltaDashCar } from '@/lib/deltadash/types';
 import { getTimeGap } from '@/lib/deltadash/targeting';
+import { getCardCategoryAccentTextClass, getCardCategoryBadgeClass, getCardCategoryFrameClass, getCardCategoryLabel, getCardCategoryMutedTextClass, getCardCategoryTextClass, getCardPriorityClass } from './card-visual-style';
 
 export function CardPlayCard({
   card,
@@ -28,7 +29,7 @@ export function CardPlayCard({
   const needsTarget = card.definition.targeting.kind === 'opponent';
   const disabled = !card.playable || (needsTarget && !validTargets.length);
   const canDeploy = !disabled && (!needsTarget || selectedTargetCarIds.length > 0);
-  const outerClass = `rounded-2xl border p-4 transition ${selected ? 'border-yellow-300/70 bg-yellow-300/15 shadow-[0_0_28px_rgba(250,204,21,0.18)]' : 'border-white/10 bg-black/25'} ${disabled ? 'opacity-55' : ''}`;
+  const outerClass = `rounded-2xl border p-4 transition ${getCardCategoryFrameClass(card.definition.category, selected)} ${selected ? 'ring-1 ring-yellow-200/45' : ''} ${disabled ? 'opacity-55' : ''}`;
 
   if (mode === 'queue') {
     return (
@@ -79,16 +80,19 @@ function CardBody({ card, language }: { card: DeltaDashPlayableCard; language: L
     <>
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
-          <p className="text-sm font-semibold text-white">{localize(card.definition.name, language)}</p>
-          <p className="mt-1 text-[0.65rem] uppercase tracking-[0.2em] text-slate-500">{card.definition.category} · P{card.definition.priority}</p>
+          <p className={`text-sm font-black ${getCardCategoryTextClass(card.definition.category)}`}>{localize(card.definition.name, language)}</p>
+          <div className="mt-2 flex flex-wrap gap-2 text-[0.62rem] font-black uppercase tracking-[0.16em]">
+            <span className={`rounded-full border px-2.5 py-1 ${getCardCategoryBadgeClass(card.definition.category)}`}>{getCardCategoryLabel(card.definition.category, language)}</span>
+            <span className={`rounded-full border px-2.5 py-1 ${getCardPriorityClass(card.definition.priority)}`}>P{card.definition.priority}</span>
+          </div>
         </div>
         <span className={`rounded-full border px-2.5 py-1 text-[0.65rem] font-medium ${statusClass(card.definition.implementationStatus)}`}>
           {card.definition.implementationStatus}
         </span>
       </div>
-      <p className="mt-3 text-xs leading-5 text-slate-400">{localize(card.definition.summary, language)}</p>
+      <p className={`mt-3 text-xs leading-5 ${getCardCategoryMutedTextClass(card.definition.category)}`}>{localize(card.definition.summary, language)}</p>
       {card.definition.targeting.range ? (
-        <p className="mt-2 text-[0.65rem] uppercase tracking-[0.18em] text-cyan-200">
+        <p className={`mt-2 text-[0.65rem] uppercase tracking-[0.18em] ${getCardCategoryAccentTextClass(card.definition.category)}`}>
           {language === 'en' ? 'Window' : '窗口'} ≤ {card.definition.targeting.range.maxTimeGap ?? '∞'}s
         </p>
       ) : null}

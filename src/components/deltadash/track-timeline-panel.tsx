@@ -1,7 +1,8 @@
 import type { Language } from '@/lib/i18n';
-import { formatTimeGap, getCarPresentation, getTimelineCars, getTrackStats } from '@/lib/deltadash/selectors';
+import { formatTimeGap, getCarPresentation, getDriverStatusVisuals, getResolutionLanes, getTimelineCars, getTrackStats, type DeltaDashResolutionLane } from '@/lib/deltadash/selectors';
 import type { DeltaDashMatchState } from '@/lib/deltadash/types';
 import { getRealTrackData } from '@/lib/deltadash/track-catalog';
+import { CardFace } from './card-play-card';
 
 const TRACK_RADIUS = 140;
 const CENTER = 200;
@@ -16,6 +17,9 @@ export function TrackTimelinePanel({ state, language }: { state: DeltaDashMatchS
   }[trackStats.tyreCurveLabel];
 
   const realTrack = getRealTrackData(state.track.realTrackKey ?? state.track.id);
+  const resolutionLanes = getResolutionLanes(state);
+  const activeResolutionCarId = resolutionLanes.find((lane) => lane.active)?.car.id ?? null;
+  const humanCarId = state.players.find((player) => player.kind === 'human')?.carId ?? null;
 
   return (
     <section className="relative min-h-[520px] overflow-hidden rounded-[2rem] border border-cyan-200/25 bg-[radial-gradient(circle_at_50%_35%,rgba(34,211,238,0.18),transparent_34%),linear-gradient(180deg,rgba(15,23,42,0.72),rgba(30,41,59,0.5))] p-4 lg:p-5">
@@ -92,7 +96,7 @@ export function TrackTimelinePanel({ state, language }: { state: DeltaDashMatchS
 
               return (
                 <g key={car.id}>
-                  <circle cx={x} cy={y} r={8} fill={car.rank === 1 ? '#fbbf24' : '#22d3ee'} stroke="#000" strokeWidth="2" />
+                  <circle cx={x} cy={y} r={car.id === activeResolutionCarId ? 12 : 8} fill={car.id === humanCarId ? '#fbbf24' : '#22d3ee'} stroke={car.id === activeResolutionCarId ? '#fef08a' : '#000'} strokeWidth={car.id === activeResolutionCarId ? 4 : 2} className={car.id === activeResolutionCarId ? 'animate-pulse' : ''} />
                   <text x={x} y={y + 1} textAnchor="middle" dominantBaseline="middle" fill="#000" fontSize="10" fontWeight="bold">
                     {car.rank}
                   </text>
@@ -122,12 +126,13 @@ export function TrackTimelinePanel({ state, language }: { state: DeltaDashMatchS
           </svg>
 
           {/* Car info overlay */}
-          <div className="absolute bottom-4 left-4 right-4 flex flex-wrap gap-2">
-            {timelineCars.slice(0, 4).map((car) => {
+          <div className="absolute bottom-4 left-4 right-4 grid max-h-28 grid-cols-2 gap-2 overflow-y-auto pr-1 sm:grid-cols-3 xl:grid-cols-4">
+            {timelineCars.map((car) => {
               const presentation = getCarPresentation(car);
+              const isHumanCar = car.id === humanCarId;
               return (
                 <div key={car.id} className="flex items-center gap-2 rounded-xl border border-white/15 bg-slate-950/80 px-2 py-1.5 text-xs">
-                  <span className={`grid h-5 w-5 place-items-center rounded-lg text-[0.65rem] font-black ${car.rank === 1 ? 'bg-yellow-300 text-slate-950' : 'bg-cyan-400 text-slate-950'}`}>
+                  <span className={`grid h-5 w-5 place-items-center rounded-lg text-[0.65rem] font-black ${isHumanCar ? 'bg-yellow-300 text-slate-950' : 'bg-cyan-400 text-slate-950'}`}>
                     {car.rank}
                   </span>
                   <span className="font-black text-white">{presentation.name}</span>
@@ -161,7 +166,117 @@ export function TrackTimelinePanel({ state, language }: { state: DeltaDashMatchS
           </div>
         </div>
       </div>
+
+      <ResolutionStage lanes={resolutionLanes} state={state} language={language} />
     </section>
+  );
+}
+
+function ResolutionStage({ lanes, state, language }: { lanes: DeltaDashResolutionLane[]; state: DeltaDashMatchState; language: Language }) {
+  if (!state.resolutionQueue.length && state.turnStep === 'planning') return null;
+
+  return (
+    <div className="relative z-10 mt-5 rounded-[2rem] border border-cyan-200/20 bg-slate-950/50 p-4">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <p className="text-xs font-black uppercase tracking-[0.28em] text-cyan-200">{language === 'en' ? 'Resolution stage' : '结算舞台'}</p>
+          <h3 className="mt-1 text-xl font-black italic text-white">{language === 'en' ? 'Cards on track' : '赛道卡牌'}</h3>
+        </div>
+        <div className="rounded-full border border-cyan-300/25 bg-cyan-300/10 px-3 py-2 text-xs font-black uppercase tracking-[0.16em] text-cyan-100">
+          {language === 'en' ? `Step ${Math.min(state.resolutionIndex + 1, state.resolutionQueue.length)}/${state.resolutionQueue.length || 1}` : `步骤 ${Math.min(state.resolutionIndex + 1, state.resolutionQueue.length)}/${state.resolutionQueue.length || 1}`}
+        </div>
+      </div>
+      <div className="mt-4 grid gap-3">
+        {lanes.map((lane) => (
+          <ResolutionLane key={lane.car.id} lane={lane} state={state} language={language} humanCarId={state.players.find((player) => player.kind === 'human')?.carId ?? null} />
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function ResolutionLane({ lane, state, language, humanCarId }: { lane: DeltaDashResolutionLane; state: DeltaDashMatchState; language: Language; humanCarId: string | null }) {
+  const status = getDriverStatusVisuals(state, lane.car);
+  const current = lane.currentItem ?? lane.latestResolvedItem ?? lane.items[0] ?? null;
+  const latestDiscard = lane.discardedCards[0];
+
+  return (
+    <article className={`grid gap-3 rounded-3xl border p-3 transition md:grid-cols-[190px_minmax(220px,1fr)_150px] ${lane.active ? 'border-cyan-200/70 bg-cyan-300/10 shadow-[0_0_34px_rgba(34,211,238,0.2)]' : 'border-white/10 bg-black/20'}`}>
+      <div className="min-w-0">
+        <div className="flex items-center gap-2">
+          <span className={`grid h-8 w-8 place-items-center rounded-xl text-xs font-black ${lane.car.id === humanCarId ? 'bg-yellow-300 text-slate-950' : 'bg-cyan-400 text-slate-950'}`}>{lane.car.rank}</span>
+          <div className="min-w-0">
+            <p className="truncate text-sm font-black text-white">{lane.presentation.name}</p>
+            <p className="text-[0.65rem] uppercase tracking-[0.16em] text-cyan-100">{lane.active ? (language === 'en' ? 'Resolving' : '结算中') : lane.awaitingChoice ? (language === 'en' ? 'Awaiting input' : '等待选择') : formatTimeGap(lane.car.rank === 1 ? 0 : lane.car.timeDelta)}</p>
+          </div>
+        </div>
+        <div className="mt-3 space-y-2">
+          <MiniBar icon="⚡" value={status.energy.percent} tone={status.energy.tone} label={`${status.energy.value}/${status.energy.max}`} />
+          <MiniBar icon="◉" value={status.tire.percent} tone={status.tire.tone} label={`${Math.round(status.tire.value)}%`} />
+          <MiniBar icon="◆" value={status.focus.percent} tone={status.focus.tone} label={`${status.focus.value}/${status.focus.max}`} />
+        </div>
+      </div>
+
+      <div className="min-w-0">
+        {current?.definition ? (
+          <div className={`mx-auto max-w-md transition duration-500 ${lane.active ? 'scale-100 opacity-100' : current.item.status === 'resolved' ? 'scale-95 opacity-70' : 'scale-95 opacity-60'}`}>
+            <CardFace definition={current.definition} language={language} compact={false} selected={lane.active} />
+          </div>
+        ) : (
+          <div className="grid min-h-36 place-items-center rounded-2xl border border-dashed border-white/15 bg-slate-950/50 text-center text-xs text-slate-500">
+            {lane.items.length ? current?.label : language === 'en' ? 'No card queued' : '无待结算卡牌'}
+          </div>
+        )}
+        {lane.items.length ? (
+          <div className="mt-2 flex flex-wrap justify-center gap-1">
+            {lane.items.map((view) => (
+              <span key={view.item.id} className={`h-2 w-8 rounded-full ${view.item.status === 'resolved' ? 'bg-lime-300' : view.item.status === 'revealed' ? 'bg-cyan-300' : 'bg-slate-600'}`} />
+            ))}
+          </div>
+        ) : null}
+      </div>
+
+      <div className="grid content-between gap-2">
+        <div className="rounded-2xl border border-orange-300/25 bg-orange-400/10 p-3">
+          <p className="text-[0.6rem] font-black uppercase tracking-[0.16em] text-orange-100">{language === 'en' ? 'Discard' : '弃牌区'}</p>
+          {latestDiscard ? (
+            <div className="mt-2 rounded-xl border border-white/10 bg-slate-950/70 p-2">
+              <p className="truncate text-xs font-black text-white">{latestDiscard.definition.name[language]}</p>
+              <p className="mt-1 text-[0.6rem] uppercase tracking-[0.12em] text-orange-100">×{lane.discardedCards.length}</p>
+            </div>
+          ) : (
+            <div className="mt-2 rounded-xl border border-dashed border-white/10 py-4 text-center text-[0.65rem] text-slate-500">0</div>
+          )}
+        </div>
+        {lane.deployedCards.length ? (
+          <div className="rounded-2xl border border-lime-300/25 bg-lime-400/10 p-3">
+            <p className="text-[0.6rem] font-black uppercase tracking-[0.16em] text-lime-100">{language === 'en' ? 'Persistent' : '持续'}</p>
+            <p className="mt-2 text-xs font-black text-white">×{lane.deployedCards.length}</p>
+          </div>
+        ) : null}
+      </div>
+    </article>
+  );
+}
+
+function MiniBar({ icon, value, tone, label }: { icon: string; value: number; tone: 'lime' | 'cyan' | 'yellow' | 'orange' | 'red' | 'slate'; label: string }) {
+  const toneClass = {
+    lime: 'from-lime-300 to-emerald-400',
+    cyan: 'from-cyan-300 to-sky-400',
+    yellow: 'from-yellow-300 to-amber-400',
+    orange: 'from-orange-300 to-red-400',
+    red: 'from-red-400 to-rose-500',
+    slate: 'from-slate-400 to-slate-500',
+  }[tone];
+
+  return (
+    <div className="grid grid-cols-[18px_1fr_42px] items-center gap-2 text-[0.65rem] text-slate-300">
+      <span>{icon}</span>
+      <div className="h-2 overflow-hidden rounded-full bg-slate-900/80 ring-1 ring-white/10">
+        <div className={`h-full rounded-full bg-gradient-to-r ${toneClass}`} style={{ width: `${Math.max(4, Math.min(100, value))}%` }} />
+      </div>
+      <span className="text-right font-mono text-slate-200">{label}</span>
+    </div>
   );
 }
 

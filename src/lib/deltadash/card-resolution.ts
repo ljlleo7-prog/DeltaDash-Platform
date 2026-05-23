@@ -31,7 +31,7 @@ export function canPlayCard(state: DeltaDashMatchState, car: DeltaDashCar, card:
 export function resolveCardEffects(state: DeltaDashMatchState, car: DeltaDashCar, card: DeltaDashCardDefinition, targetCar?: DeltaDashCar): DeltaDashResolvedAction {
   const effectiveEffects = canPlayCard(state, car, card) ? card.effects : [];
   const target = targetCar ?? car;
-  const yellowFlag = state.flag === 'yellow' || target.penalties.includes('speed-cap');
+  const yellowFlag = state.flag === 'yellow';
 
   return effectiveEffects.reduce<DeltaDashResolvedAction>((result, effect) => applyEffect(result, effect, yellowFlag), {
     carId: target.id,

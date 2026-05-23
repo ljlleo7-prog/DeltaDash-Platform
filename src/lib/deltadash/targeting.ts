@@ -1,6 +1,6 @@
 import { getCardDefinitionById } from './playable-card-catalog';
 import type { DeltaDashCardDefinition } from './card-types';
-import type { DeltaDashCar, DeltaDashMatchState } from './types';
+import { DELTADASH_WHEEL_TO_WHEEL_SECONDS, type DeltaDashCar, type DeltaDashMatchState } from './types';
 
 export type DeltaDashResolvedTargets = {
   targetCarIds: string[];
@@ -78,8 +78,8 @@ function isTargetInRange(sourceCar: DeltaDashCar, targetCar: DeltaDashCar, card:
   if (!range) return true;
 
   const timeGap = getTimeGap(sourceCar, targetCar);
-  if (range.inFrontOnly && targetCar.timeDelta <= sourceCar.timeDelta) return false;
-  if (range.minTimeGap !== undefined && timeGap < range.minTimeGap) return false;
-  if (range.maxTimeGap !== undefined && timeGap > range.maxTimeGap) return false;
+  if (range.inFrontOnly && targetCar.timeDelta + DELTADASH_WHEEL_TO_WHEEL_SECONDS < sourceCar.timeDelta) return false;
+  if (range.minTimeGap !== undefined && timeGap < Math.max(0, range.minTimeGap - DELTADASH_WHEEL_TO_WHEEL_SECONDS)) return false;
+  if (range.maxTimeGap !== undefined && timeGap > range.maxTimeGap + DELTADASH_WHEEL_TO_WHEEL_SECONDS) return false;
   return true;
 }

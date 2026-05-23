@@ -6,6 +6,7 @@ export function PlayCockpitLayout({
   cardRail,
   standings,
   timeline,
+  raceFlow,
   raceControl,
   driverConsole,
 }: {
@@ -13,6 +14,7 @@ export function PlayCockpitLayout({
   cardRail: ReactNode;
   standings: ReactNode;
   timeline: ReactNode;
+  raceFlow: ReactNode;
   raceControl: ReactNode;
   driverConsole: ReactNode;
 }) {
@@ -28,7 +30,9 @@ export function PlayCockpitLayout({
         </div>
       </div>
 
-      <div className="grid gap-4 xl:grid-cols-[300px_minmax(0,1fr)_300px]">
+      {raceFlow}
+
+      <div className="mt-4 grid gap-4 xl:grid-cols-[300px_minmax(0,1fr)_300px]">
         <aside className="min-w-0 space-y-4">
           {standings}
           {raceControl}

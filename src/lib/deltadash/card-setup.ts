@@ -28,13 +28,9 @@ export function createInitialCardInstances(cars: DeltaDashCar[], seed: number = 
     const remainingTactics = tacticDeck.slice(DELTADASH_RACE_INIT.startingHandTactics);
     return [...openingActions, ...openingTactics, ...remainingActions, ...remainingTactics].map((card) => ({
       ...card,
-      revealed: car.id !== 'car-human',
+      revealed: car.playerId !== 'player-human',
     }));
   });
-}
-
-export function createPrototypeCardInstances(cars: DeltaDashCar[]): DeltaDashCardInstance[] {
-  return createInitialCardInstances(cars);
 }
 
 export function getDrawableCardInstanceIds(
@@ -98,10 +94,24 @@ function parseCardCount(count: string): number {
 }
 
 function shuffleDeterministically<T extends { instanceId: string }>(items: T[], seed: string): T[] {
-  return [...items]
-    .map((item) => ({ item, score: hashString(`${seed}:${item.instanceId}`) }))
-    .sort((a, b) => a.score - b.score || a.item.instanceId.localeCompare(b.item.instanceId))
-    .map(({ item }) => item);
+  const shuffled = [...items];
+  let state = hashString(`${seed}:${items.map((item) => item.instanceId).join('|')}`) || 1;
+
+  for (let index = shuffled.length - 1; index > 0; index -= 1) {
+    state = nextRandomState(state);
+    const swapIndex = state % (index + 1);
+    [shuffled[index], shuffled[swapIndex]] = [shuffled[swapIndex], shuffled[index]];
+  }
+
+  return shuffled;
+}
+
+function nextRandomState(state: number): number {
+  let next = state >>> 0;
+  next ^= next << 13;
+  next ^= next >>> 17;
+  next ^= next << 5;
+  return next >>> 0;
 }
 
 function hashString(value: string): number {

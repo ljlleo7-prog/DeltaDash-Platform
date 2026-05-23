@@ -10,7 +10,7 @@ export type DeltaDashPlayerKind = 'human' | 'bot';
 
 export type DeltaDashFlag = 'green' | 'yellow';
 
-export type DeltaDashPenalty = 'warning' | 'speed-cap' | 'retired';
+export type DeltaDashPenalty = 'warning' | 'time-penalty' | 'retired';
 
 export type DeltaDashTyreCompound = 'soft' | 'medium' | 'hard' | 'intermediate' | 'wet';
 
@@ -37,6 +37,7 @@ export interface DeltaDashPitState {
 }
 
 export const DELTADASH_RESPONSE_WINDOW_SECONDS = 3;
+export const DELTADASH_WHEEL_TO_WHEEL_SECONDS = 0.2;
 
 export interface DeltaDashDataUpdateState {
   lastRound: number;
@@ -117,9 +118,67 @@ export interface DeltaDashCar {
   pitState: DeltaDashPitState;
 }
 
+export type DeltaDashTurnStep = 'planning' | 'locked' | 'reveal' | 'choice' | 'steward' | 'cleanup' | 'roundEnd';
+
+export type DeltaDashResolutionItemStatus = 'pending' | 'revealed' | 'resolved';
+
+export interface DeltaDashResolutionItem {
+  id: string;
+  round: number;
+  carId: string;
+  action: DeltaDashActionType;
+  slotIndex: number;
+  priority: number;
+  cardDefinitionId?: string;
+  cardInstanceId?: string;
+  targetCarIds?: string[];
+  status: DeltaDashResolutionItemStatus;
+}
+
+export type DeltaDashPendingChoice =
+  | {
+      id: string;
+      kind: 'selectNumber';
+      round: number;
+      itemId: string;
+      carId: string;
+      cardDefinitionId: string;
+      min: number;
+      max: number;
+      selected?: number;
+    }
+  | {
+      id: string;
+      kind: 'selectCards';
+      round: number;
+      itemId: string;
+      carId: string;
+      cardDefinitionId: string;
+      min: number;
+      max: number;
+      validCardInstanceIds: string[];
+      selectedCardInstanceIds?: string[];
+    }
+  | {
+      id: string;
+      kind: 'handLimitDiscard';
+      round: number;
+      carId: string;
+      requiredCount: number;
+      validCardInstanceIds: string[];
+      selectedCardInstanceIds?: string[];
+    };
+
+export interface DeltaDashCleanupState {
+  status: 'idle' | 'discard-required' | 'complete';
+  carId?: string;
+  requiredDiscardCount?: number;
+}
+
 export interface DeltaDashActionCommitment {
   carId: string;
   action: DeltaDashActionType;
+  slotIndex?: number;
   cardDefinitionId?: string;
   cardInstanceId?: string;
   targetCarIds?: string[];
@@ -145,6 +204,11 @@ export interface DeltaDashMatchState {
   cars: DeltaDashCar[];
   cards: DeltaDashCardInstance[];
   commitments: DeltaDashActionCommitment[];
+  turnStep: DeltaDashTurnStep;
+  resolutionQueue: DeltaDashResolutionItem[];
+  resolutionIndex: number;
+  pendingChoice: DeltaDashPendingChoice | null;
+  cleanup: DeltaDashCleanupState | null;
   stewardNotes: DeltaDashStewardNote[];
   dataUpdate: DeltaDashDataUpdateState;
   finishedAtRound: number | null;
@@ -218,6 +282,7 @@ export type DeltaDashEvent =
       cardInstanceId: string;
       cardDefinitionId: string;
       action: DeltaDashActionType;
+      slotIndex?: number;
       targetCarIds?: string[];
     }
   | {
@@ -241,6 +306,12 @@ export type DeltaDashEvent =
       cardInstanceIds: string[];
     }
   | {
+      type: 'HAND_OVERLOAD_PENALTY';
+      round: number;
+      carId: string;
+      timeLoss: number;
+    }
+  | {
       type: 'COMMITMENTS_LOCKED';
       round: number;
       responseWindowSeconds: number;
@@ -249,6 +320,60 @@ export type DeltaDashEvent =
       type: 'ACTIONS_RESOLVED';
       round: number;
       results: DeltaDashResolvedAction[];
+    }
+  | {
+      type: 'RESOLUTION_QUEUE_PREPARED';
+      round: number;
+      items: DeltaDashResolutionItem[];
+    }
+  | {
+      type: 'RESOLUTION_ITEM_REVEALED';
+      round: number;
+      itemId: string;
+    }
+  | {
+      type: 'RESOLUTION_CHOICE_REQUESTED';
+      round: number;
+      choice: DeltaDashPendingChoice;
+    }
+  | {
+      type: 'RESOLUTION_CHOICE_SUBMITTED';
+      round: number;
+      choice: DeltaDashPendingChoice;
+    }
+  | {
+      type: 'RESOLUTION_ITEM_RESOLVED';
+      round: number;
+      itemId: string;
+      results: DeltaDashResolvedAction[];
+    }
+  | {
+      type: 'RESOLUTION_QUEUE_COMPLETED';
+      round: number;
+    }
+  | {
+      type: 'CLEANUP_STARTED';
+      round: number;
+    }
+  | {
+      type: 'HAND_LIMIT_DISCARD_REQUESTED';
+      round: number;
+      choice: Extract<DeltaDashPendingChoice, { kind: 'handLimitDiscard' }>;
+    }
+  | {
+      type: 'HAND_LIMIT_DISCARD_SUBMITTED';
+      round: number;
+      choice: Extract<DeltaDashPendingChoice, { kind: 'handLimitDiscard' }>;
+    }
+  | {
+      type: 'CLEANUP_COMPLETED';
+      round: number;
+    }
+  | {
+      type: 'FOCUS_REFRESHED';
+      round: number;
+      carId: string;
+      focusDelta: number;
     }
   | {
       type: 'STEWARD_REVIEWED';

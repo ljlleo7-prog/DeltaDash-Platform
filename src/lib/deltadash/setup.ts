@@ -6,20 +6,22 @@ import type { DeltaDashCar, DeltaDashEvent, DeltaDashMatchState } from './types'
 export const DELTADASH_PLAYER_COUNT_OPTIONS = prototypeDrivers.map((_, index) => index + 1).filter((count) => count >= 2);
 
 export function createInitialMatchEvent(trackKey = DEFAULT_REAL_TRACK_ID, playerCount = 4): DeltaDashEvent {
-  const selectedDrivers = prototypeDrivers.slice(0, clampPlayerCount(playerCount));
+  const seed = createMatchSeed();
+  const selectedDrivers = getSeededDrivers(seed).slice(0, clampPlayerCount(playerCount));
+  const humanIndex = getHumanDriverIndex(trackKey, selectedDrivers.length, seed);
   const players = selectedDrivers.map((driver, index) => {
-    const isHuman = index === 0;
+    const isHuman = index === humanIndex;
     return {
       id: isHuman ? 'player-human' : `player-bot-${index}`,
       name: isHuman ? 'You' : `Bot ${driver.name}`,
       kind: isHuman ? 'human' as const : 'bot' as const,
-      carId: isHuman ? 'car-human' : `car-bot-${index}`,
+      carId: isHuman ? `car-human-${index}` : `car-bot-${index}`,
     };
   });
   const cars = selectedDrivers
     .map((driver, index) => {
-      const isHuman = index === 0;
-      return createCar(isHuman ? 'car-human' : `car-bot-${index}`, isHuman ? 'player-human' : `player-bot-${index}`, driver.id, driver.carName);
+      const isHuman = index === humanIndex;
+      return createCar(isHuman ? `car-human-${index}` : `car-bot-${index}`, isHuman ? 'player-human' : `player-bot-${index}`, driver.id, driver.carName);
     })
     .sort((left, right) => right.driverStats.qualifyingModifier - left.driverStats.qualifyingModifier || left.id.localeCompare(right.id))
     .map((car, gridIndex, grid) => ({
@@ -29,17 +31,22 @@ export function createInitialMatchEvent(trackKey = DEFAULT_REAL_TRACK_ID, player
     }));
 
   const match: DeltaDashMatchState = {
-    id: `local-${Date.now()}`,
-    seed: DELTADASH_RACE_INIT.seed,
+    id: `local-${Date.now()}-${seed.toString(36)}`,
+    seed,
     round: 1,
     phase: 'planning',
     racePhase: 'preparation',
-    track: createDeltaDashTrack(trackKey, DELTADASH_RACE_INIT.seed),
+    track: createDeltaDashTrack(trackKey, seed),
     flag: 'green',
     players,
     cars,
-    cards: createInitialCardInstances(cars, DELTADASH_RACE_INIT.seed),
+    cards: createInitialCardInstances(cars, seed),
     commitments: [],
+    turnStep: 'planning',
+    resolutionQueue: [],
+    resolutionIndex: 0,
+    pendingChoice: null,
+    cleanup: null,
     stewardNotes: [],
     dataUpdate: {
       lastRound: 1,
@@ -56,6 +63,33 @@ export function createInitialMatchEvent(trackKey = DEFAULT_REAL_TRACK_ID, player
 
 function clampPlayerCount(playerCount: number): number {
   return Math.min(prototypeDrivers.length, Math.max(2, Math.floor(playerCount)));
+}
+
+function getSeededDrivers(seed: number) {
+  return [...prototypeDrivers].sort((left, right) => hashString(`${seed}:${left.id}:driver`) - hashString(`${seed}:${right.id}:driver`));
+}
+
+function getHumanDriverIndex(trackKey: string, playerCount: number, seed: number): number {
+  return hashString(`${seed}:${trackKey}:${playerCount}:human`) % playerCount;
+}
+
+function createMatchSeed(): number {
+  if (typeof crypto !== 'undefined' && typeof crypto.getRandomValues === 'function') {
+    const values = new Uint32Array(1);
+    crypto.getRandomValues(values);
+    return values[0] || Date.now();
+  }
+
+  return Math.floor((Date.now() + Math.random()) * 1000) >>> 0;
+}
+
+function hashString(value: string): number {
+  let hash = 2166136261;
+  for (let index = 0; index < value.length; index += 1) {
+    hash ^= value.charCodeAt(index);
+    hash = Math.imul(hash, 16777619);
+  }
+  return hash >>> 0;
 }
 
 function getGridStartEnergy(gridIndex: number, gridSize: number): number {

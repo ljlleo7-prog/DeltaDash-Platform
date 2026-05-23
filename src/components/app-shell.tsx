@@ -53,10 +53,18 @@ export function AppShell({ children }: { children: ReactNode }) {
 
       <main className="dd-main-panel">{children}</main>
 
-      <footer className="dd-main-panel mt-0 border-t border-white/10 py-4 text-center text-xs text-slate-500">
-        <NavLink to="/terms" className="hover:text-slate-300">
-          {language === 'en' ? 'Terms of Use & License' : '使用条款与许可声明'}
-        </NavLink>
+      <footer className="dd-main-panel mt-0 border-t border-white/10 py-4 text-xs text-slate-500">
+        <div className="flex flex-wrap items-center justify-center gap-x-5 gap-y-2 text-center">
+          <NavLink to="/terms" className="hover:text-slate-300">
+            {language === 'en' ? 'Terms of Use & License' : '使用条款与许可声明'}
+          </NavLink>
+          <a href="https://geeksproductionstudio.com" target="_blank" rel="noreferrer" className="hover:text-slate-300">
+            {language === 'en' ? 'Official website' : '官方网站'}
+          </a>
+          <NavLink to="/community" className="hover:text-slate-300">
+            {language === 'en' ? 'Community feedback' : '社区反馈'}
+          </NavLink>
+        </div>
       </footer>
     </div>
   );

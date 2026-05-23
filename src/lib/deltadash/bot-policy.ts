@@ -63,7 +63,7 @@ export function chooseBotPitService(state: DeltaDashMatchState, car: DeltaDashCa
 export function chooseBotAction(state: DeltaDashMatchState, car: DeltaDashCar): DeltaDashActionType {
   if (car.retired) return 'steady';
   if (car.tire <= 34 || car.energy <= 1) return 'recover';
-  if (car.penalties.includes('speed-cap') || state.flag === 'yellow') return 'defend';
+  if (state.flag === 'yellow') return 'defend';
 
   const leaderTimeDelta = Math.max(...state.cars.filter((candidate) => !candidate.retired).map((candidate) => candidate.timeDelta));
   const timeDeltaToFinish = state.track.finishTimeDelta - car.timeDelta;
@@ -177,7 +177,7 @@ function scoreBotCard(state: DeltaDashMatchState, car: DeltaDashCar, card: Delta
     case 'action.recycle':
       return car.energy <= 2 ? 12 + (4 - car.energy) : 0;
     case 'action.defend':
-      return underThreat || state.flag === 'yellow' || car.penalties.includes('speed-cap') ? 18 : 3;
+      return underThreat || state.flag === 'yellow' ? 18 : 3;
     case 'tactic.mgu-h-recovery':
       return car.energy <= 1 || (car.energy <= 2 && gapToLeader >= 1.5) ? 17 : 0;
     case 'tactic.little-tune-power':

@@ -21,6 +21,7 @@ const PIT_TYRE_CHANGE_TIME_LOSS_SECONDS = 2.4;
 const PIT_REPAIR_TIME_LOSS_SECONDS = 1.4;
 const PIT_REPAIR_TYRE_GAIN = 18;
 const PIT_REPAIR_FOCUS_GAIN = 2;
+const STEWARD_TIME_PENALTY_SECONDS = 3;
 
 export function projectDeltaDashEvents(events: DeltaDashEvent[]): DeltaDashMatchState | null {
   return events.reduce<DeltaDashMatchState | null>((state, event) => applyDeltaDashEvent(state, event), null);
@@ -39,7 +40,7 @@ export function applyDeltaDashEvent(state: DeltaDashMatchState | null, event: De
     case 'PIT_EXITED':
       return state ? exitPitLane(state, event.carId) : state;
     case 'ROUND_STARTED':
-      return state ? { ...state, round: event.round, phase: 'planning', commitments: [], cars: state.cars.map((car) => ({ ...car, roundModifiers: getPersistentRoundModifiers(state, car.id), pitState: car.pitState.status === 'exited' ? { ...car.pitState, status: 'none', pendingCompound: undefined, repairSelected: false } : car.pitState })), dataUpdate: { lastRound: event.round, preparationApplied: true, rankingUpdated: false, incidentsChecked: false, pitChecked: false } } : state;
+      return state ? { ...state, round: event.round, phase: 'planning', turnStep: 'planning', commitments: [], resolutionQueue: [], resolutionIndex: 0, pendingChoice: null, cleanup: null, cars: state.cars.map((car) => ({ ...car, roundModifiers: getPersistentRoundModifiers(state, car.id), pitState: car.pitState.status === 'exited' ? { ...car.pitState, status: 'none', pendingCompound: undefined, repairSelected: false } : car.pitState })), dataUpdate: { lastRound: event.round, preparationApplied: true, rankingUpdated: false, incidentsChecked: false, pitChecked: false } } : state;
     case 'TYRE_SELECTED':
       return state && state.racePhase === 'preparation' ? { ...state, cars: state.cars.map((car) => car.id === event.carId ? { ...car, tyreState: { ...car.tyreState, compound: event.compound, age: 0 } } : car) } : state;
     case 'PIT_STATUS_CHANGED':
@@ -51,15 +52,39 @@ export function applyDeltaDashEvent(state: DeltaDashMatchState | null, event: De
     case 'ACTION_COMMITTED':
       return state ? commitAction(state, event.carId, event.action, undefined, undefined, event.targetCarIds) : state;
     case 'CARD_PLAY_COMMITTED':
-      return state ? commitAction(state, event.carId, event.action, event.cardDefinitionId, event.cardInstanceId, event.targetCarIds) : state;
+      return state ? commitAction(state, event.carId, event.action, event.cardDefinitionId, event.cardInstanceId, event.targetCarIds, event.slotIndex) : state;
     case 'CARD_MOVED':
       return state ? moveCard(state, event.cardInstanceId, event.zone, event.revealed, event.clearRoundModifiers) : state;
     case 'CARD_RESOLVED':
       return state;
     case 'CARDS_DRAWN':
       return state ? drawCards(state, event.carId, event.cardInstanceIds) : state;
+    case 'HAND_OVERLOAD_PENALTY':
+      return state ? applyHandOverloadPenalty(state, event.carId, event.timeLoss, event.round) : state;
     case 'COMMITMENTS_LOCKED':
-      return state ? { ...state, phase: 'resolving' } : state;
+      return state ? { ...state, phase: 'resolving', turnStep: 'locked' } : state;
+    case 'RESOLUTION_QUEUE_PREPARED':
+      return state ? { ...state, resolutionQueue: event.items, resolutionIndex: 0, turnStep: 'reveal' } : state;
+    case 'RESOLUTION_ITEM_REVEALED':
+      return state ? { ...state, turnStep: 'reveal', resolutionQueue: state.resolutionQueue.map((item) => item.id === event.itemId ? { ...item, status: 'revealed' } : item) } : state;
+    case 'RESOLUTION_CHOICE_REQUESTED':
+      return state ? { ...state, turnStep: 'choice', pendingChoice: event.choice } : state;
+    case 'RESOLUTION_CHOICE_SUBMITTED':
+      return state ? { ...state, pendingChoice: null } : state;
+    case 'RESOLUTION_ITEM_RESOLVED':
+      return state ? resolveActions({ ...state, resolutionQueue: state.resolutionQueue.map((item) => item.id === event.itemId ? { ...item, status: 'resolved' } : item), resolutionIndex: state.resolutionIndex + 1, turnStep: 'reveal' }, event.results) : state;
+    case 'RESOLUTION_QUEUE_COMPLETED':
+      return state ? { ...state, turnStep: 'steward' } : state;
+    case 'CLEANUP_STARTED':
+      return state ? { ...state, turnStep: 'cleanup', cleanup: { status: 'idle' } } : state;
+    case 'HAND_LIMIT_DISCARD_REQUESTED':
+      return state ? { ...state, turnStep: 'cleanup', pendingChoice: event.choice, cleanup: { status: 'discard-required', carId: event.choice.carId, requiredDiscardCount: event.choice.requiredCount } } : state;
+    case 'HAND_LIMIT_DISCARD_SUBMITTED':
+      return state ? submitHandLimitDiscard(state, event.choice.selectedCardInstanceIds ?? []) : state;
+    case 'CLEANUP_COMPLETED':
+      return state ? { ...state, turnStep: 'roundEnd', cleanup: { status: 'complete' } } : state;
+    case 'FOCUS_REFRESHED':
+      return state ? { ...state, cars: state.cars.map((car) => car.id === event.carId ? { ...car, focus: clamp(car.focus + event.focusDelta, 0, car.focusCap) } : car) } : state;
     case 'ACTIONS_RESOLVED':
       return state ? resolveActions(state, event.results) : state;
     case 'STEWARD_REVIEWED':
@@ -73,7 +98,7 @@ export function applyDeltaDashEvent(state: DeltaDashMatchState | null, event: De
           }
         : state;
     case 'ROUND_ENDED':
-      return state ? { ...state, phase: 'roundEnd', commitments: [] } : state;
+      return state ? { ...applyRoundEndTyreWear(state), phase: 'roundEnd', commitments: [] } : state;
     case 'MATCH_FINISHED':
       return state ? { ...state, phase: 'finished', racePhase: 'finished', finishedAtRound: event.round } : state;
     default:
@@ -82,7 +107,7 @@ export function applyDeltaDashEvent(state: DeltaDashMatchState | null, event: De
 }
 
 export function resolveAction(car: DeltaDashCar, action: DeltaDashActionType, track: DeltaDashTrack, yellowFlag: boolean): DeltaDashResolvedAction {
-  const hasSpeedCap = car.penalties.includes('speed-cap') || yellowFlag;
+  const hasSpeedCap = yellowFlag;
 
   if (car.retired) {
     return { carId: car.id, sourceCarId: car.id, targetCarId: car.id, action, timeDeltaChange: 0, energyDelta: 0, tireDelta: 0, focusDelta: 0, roundModifiers: [] };
@@ -151,7 +176,7 @@ function computeTyreWear(track: DeltaDashTrack, car: DeltaDashCar, action: Delta
   const tempFactor = track.weather.temperatureBand === 'hot' ? 1.08 : track.weather.temperatureBand === 'cool' ? 0.96 : 1;
   const compoundWetFactor = getCompoundWetFactor(car.tyreState.compound, wetness, tyreCurve.wetCrossover);
   const ageFactor = 1 + Math.min(0.18, car.tyreState.age * 0.012);
-  return roundToTenth(clamp(baseWear * actionFactor * trackFactor * tempFactor * compoundWetFactor * ageFactor / 6, 0.4, 18));
+  return roundToTenth(clamp(baseWear * actionFactor * trackFactor * tempFactor * compoundWetFactor * ageFactor, 0.4, 18));
 }
 
 function computeTyrePerformanceAdjustment(track: DeltaDashTrack, car: DeltaDashCar, action: DeltaDashActionType): number {
@@ -216,8 +241,8 @@ function roundToTenth(value: number): number {
   return Math.round(value * 10) / 10;
 }
 
-function commitAction(state: DeltaDashMatchState, carId: string, action: DeltaDashActionType, cardDefinitionId?: string, cardInstanceId?: string, targetCarIds: string[] = []): DeltaDashMatchState {
-  return { ...state, commitments: [...state.commitments, { carId, action, cardDefinitionId, cardInstanceId, targetCarIds }] };
+function commitAction(state: DeltaDashMatchState, carId: string, action: DeltaDashActionType, cardDefinitionId?: string, cardInstanceId?: string, targetCarIds: string[] = [], slotIndex?: number): DeltaDashMatchState {
+  return { ...state, commitments: [...state.commitments, { carId, action, cardDefinitionId, cardInstanceId, targetCarIds, slotIndex }] };
 }
 
 function moveCard(state: DeltaDashMatchState, cardInstanceId: string, zone: DeltaDashMatchState['cards'][number]['zone'], revealed: boolean, clearRoundModifiers: string[] = []): DeltaDashMatchState {
@@ -302,6 +327,16 @@ function exitPitLane(state: DeltaDashMatchState, carId: string): DeltaDashMatchS
   };
 }
 
+function submitHandLimitDiscard(state: DeltaDashMatchState, selectedCardInstanceIds: string[]): DeltaDashMatchState {
+  const selectedIds = new Set(selectedCardInstanceIds);
+  return {
+    ...state,
+    pendingChoice: null,
+    cleanup: { status: 'complete' },
+    cards: state.cards.map((card) => selectedIds.has(card.instanceId) ? { ...card, zone: 'discard' as const, revealed: true } : card),
+  };
+}
+
 function drawCards(state: DeltaDashMatchState, carId: string, cardInstanceIds: string[]): DeltaDashMatchState {
   const player = state.players.find((candidate) => candidate.carId === carId);
   const revealed = player?.kind === 'bot';
@@ -313,6 +348,26 @@ function drawCards(state: DeltaDashMatchState, carId: string, cardInstanceIds: s
   };
 }
 
+function applyHandOverloadPenalty(state: DeltaDashMatchState, carId: string, timeLoss: number, round: number): DeltaDashMatchState {
+  const car = state.cars.find((candidate) => candidate.id === carId);
+  if (!car || timeLoss <= 0) return state;
+
+  return {
+    ...state,
+    stewardNotes: [
+      ...state.stewardNotes,
+      {
+        id: `hand-overload-${round}-${carId}-${state.stewardNotes.length}`,
+        round,
+        carIds: [carId],
+        severity: 'penalty',
+        message: `${car.name} exceeded focus hand capacity and loses ${timeLoss.toFixed(1)}s.`,
+      },
+    ],
+    cars: state.cars.map((candidate) => candidate.id === carId ? { ...candidate, timeDelta: Math.max(0, candidate.timeDelta - timeLoss) } : candidate),
+  };
+}
+
 function resolveActions(state: DeltaDashMatchState, results: DeltaDashResolvedAction[]): DeltaDashMatchState {
   const resultsByCarId = new Map<string, DeltaDashResolvedAction[]>();
   for (const result of results) {
@@ -321,7 +376,7 @@ function resolveActions(state: DeltaDashMatchState, results: DeltaDashResolvedAc
 
   return {
     ...state,
-    phase: 'resolving',
+    phase: state.phase === 'planning' ? 'resolving' : state.phase,
     cars: state.cars.map((car) => {
       const carResults = resultsByCarId.get(car.id);
       if (!carResults?.length) return car;
@@ -329,15 +384,14 @@ function resolveActions(state: DeltaDashMatchState, results: DeltaDashResolvedAc
 
       return {
         ...car,
-        timeDelta: Math.max(0, car.timeDelta + result.timeDeltaChange),
-        energy: clamp(car.energy + result.energyDelta, result.energyMin ?? 0, result.energyMax ?? 4),
-        tire: result.roundModifiers?.includes('no-tire-wear') ? car.tire : clamp(car.tire + result.tireDelta, result.tireMin ?? 0, result.tireMax ?? 100),
-        focus: clamp((car.focus ?? 0) + (result.focusDelta ?? 0), result.focusMin ?? 0, Math.min(car.focusCap ?? 8, result.focusMax ?? Number.POSITIVE_INFINITY)),
+        timeDelta: roundToHundredth(Math.max(0, car.timeDelta + result.timeDeltaChange)),
+        energy: roundToHundredth(clamp(car.energy + result.energyDelta, result.energyMin ?? 0, result.energyMax ?? 4)),
+        tire: result.roundModifiers?.includes('no-tire-wear') ? roundToHundredth(car.tire) : roundToHundredth(clamp(car.tire + result.tireDelta, result.tireMin ?? 0, result.tireMax ?? 100)),
+        focus: roundToHundredth(clamp((car.focus ?? 0) + (result.focusDelta ?? 0), result.focusMin ?? 0, Math.min(car.focusCap ?? 8, result.focusMax ?? Number.POSITIVE_INFINITY))),
         roundModifiers: [...new Set([...(car.roundModifiers ?? []), ...(result.roundModifiers ?? [])])],
         lastAction: result.sourceCarId === car.id ? result.action : car.lastAction,
-        tyreState: { ...car.tyreState, age: car.tyreState.age + 1 },
         pitState: { ...car.pitState, cooldown: Math.max(0, car.pitState.cooldown - 1) },
-        penalties: car.penalties.filter((penalty) => penalty !== 'speed-cap'),
+        penalties: car.penalties,
       };
     }),
   };
@@ -360,6 +414,25 @@ function mergeResults(results: DeltaDashResolvedAction[]): DeltaDashResolvedActi
   }), { ...results[0], timeDeltaChange: 0, energyDelta: 0, tireDelta: 0, focusDelta: 0, roundModifiers: [] });
 }
 
+function applyRoundEndTyreWear(state: DeltaDashMatchState): DeltaDashMatchState {
+  return {
+    ...state,
+    cars: state.cars.map((car) => {
+      if (car.retired || car.pitState.status === 'servicing') return car;
+      const commitment = state.commitments.find((candidate) => candidate.carId === car.id);
+      const action = commitment?.action ?? car.lastAction ?? 'steady';
+      const tyreDelta = car.roundModifiers.includes('no-tire-wear') ? 0 : getTyreDelta(state.track, car, action);
+
+      return {
+        ...car,
+        tire: roundToHundredth(clamp(car.tire + tyreDelta, 0, 100)),
+        tyreState: { ...car.tyreState, age: car.tyreState.age + 1 },
+        pitState: { ...car.pitState, cooldown: Math.max(0, car.pitState.cooldown - 1) },
+      };
+    }),
+  };
+}
+
 function getPersistentRoundModifiers(state: DeltaDashMatchState, carId: string): string[] {
   const car = state.cars.find((candidate) => candidate.id === carId);
   const hasSteadfastDefense = state.cards.some((card) => card.ownerCarId === carId && card.definitionId === 'tactic.steadfast-lion' && card.zone === 'deployed');
@@ -379,11 +452,11 @@ function applyStewardNotes(cars: DeltaDashCar[], notes: DeltaDashStewardNote[]):
     const retired = car.retired || carNotes.some((note) => note.severity === 'retirement');
     const penalties = new Set(car.penalties);
 
-    if (hasPenalty) penalties.add('speed-cap');
+    if (hasPenalty) penalties.add('time-penalty');
     if (warnings > 0) penalties.add('warning');
     if (retired) penalties.add('retired');
 
-    return { ...car, warnings, penalties: Array.from(penalties), retired };
+    return { ...car, timeDelta: hasPenalty ? roundToHundredth(Math.max(0, car.timeDelta - STEWARD_TIME_PENALTY_SECONDS)) : roundToHundredth(car.timeDelta), warnings, penalties: Array.from(penalties), retired };
   });
 }
 
@@ -410,6 +483,11 @@ function ensureMatchState(state: DeltaDashMatchState): DeltaDashMatchState {
   return ensureCardState({
     ...state,
     racePhase: state.racePhase ?? (state.phase === 'finished' ? 'finished' : 'live'),
+    turnStep: state.turnStep ?? (state.phase === 'finished' ? 'roundEnd' : 'planning'),
+    resolutionQueue: state.resolutionQueue ?? [],
+    resolutionIndex: state.resolutionIndex ?? 0,
+    pendingChoice: state.pendingChoice ?? null,
+    cleanup: state.cleanup ?? null,
     track: upgradedTrack,
     dataUpdate: state.dataUpdate ?? {
       lastRound: state.round,
@@ -427,10 +505,10 @@ function ensureCardState(state: DeltaDashMatchState): DeltaDashMatchState {
 
     return {
       ...car,
-      timeDelta: Number.isFinite(car.timeDelta) ? car.timeDelta : Number.isFinite((car as DeltaDashCar & { progress?: number }).progress) ? (car as DeltaDashCar & { progress?: number }).progress ?? 0 : 0,
-      energy: Number.isFinite(car.energy) ? car.energy : DELTADASH_RACE_INIT.startingEnergy,
+      timeDelta: roundToHundredth(Number.isFinite(car.timeDelta) ? car.timeDelta : Number.isFinite((car as DeltaDashCar & { progress?: number }).progress) ? (car as DeltaDashCar & { progress?: number }).progress ?? 0 : 0),
+      energy: roundToHundredth(Number.isFinite(car.energy) ? car.energy : DELTADASH_RACE_INIT.startingEnergy),
       tire: normalizeTyrePercent(car.tire),
-      focus: Number.isFinite(car.focus) ? car.focus : driverStats.focusCap,
+      focus: roundToHundredth(Number.isFinite(car.focus) ? car.focus : driverStats.focusCap),
       focusCap: Number.isFinite(car.focusCap) ? car.focusCap : driverStats.focusCap,
       roundModifiers: car.roundModifiers ?? [],
       lastAction: car.lastAction ?? 'steady',
@@ -451,6 +529,10 @@ function normalizeTyrePercent(value: number): number {
   if (!Number.isFinite(value)) return DELTADASH_RACE_INIT.startingTire;
   if (value <= 6) return roundToTenth((value / 6) * 100);
   return clamp(value, 0, 100);
+}
+
+function roundToHundredth(value: number): number {
+  return Math.round(value * 100) / 100;
 }
 
 function clamp(value: number, min: number, max: number) {

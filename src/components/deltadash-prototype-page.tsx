@@ -1,42 +1,108 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { AssetGallery } from '@/components/deltadash/asset-gallery';
 import { CardRailPanel } from '@/components/deltadash/card-rail-panel';
 import { DriverConsolePanel } from '@/components/deltadash/driver-console-panel';
 import { PlayCockpitLayout } from '@/components/deltadash/play-cockpit-layout';
-import { RaceControlPanel } from '@/components/deltadash/race-control-panel';
+import { RaceControlPanel, RaceFlowPanel } from '@/components/deltadash/race-control-panel';
 import { StandingsPanel } from '@/components/deltadash/standings-panel';
 import { TrackTimelinePanel } from '@/components/deltadash/track-timeline-panel';
 import { useLanguage } from '@/components/language-provider';
 import { LocalizedSectionHeader } from '@/components/localized-section-header';
-import { advanceLocalMatch, createRaceStartEvents, enterPitLane, exitPitLaneAndAdvance, removeDeployedCard, updatePitService, type DeltaDashCardPlayInput, type DeltaDashPitServiceInput } from '@/lib/deltadash/match-flow';
+import { confirmTurn, continueCleanup, createRaceStartEvents, discardHandCard, enterPitLane, exitPitLaneAndAdvance, finishResolution, getNextAutomaticFlowEvents, removeDeployedCard, resolveCurrentResolutionItem, revealNextResolutionItem, submitHandLimitDiscardChoice, submitResolutionChoice, updatePitService, type DeltaDashCardPlayInput, type DeltaDashPitServiceInput } from '@/lib/deltadash/match-flow';
 import { projectDeltaDashEvents } from '@/lib/deltadash/reducer';
 import { createInitialMatchEvent, DELTADASH_PLAYER_COUNT_OPTIONS } from '@/lib/deltadash/setup';
 import { DEFAULT_REAL_TRACK_ID, REAL_TRACK_OPTIONS } from '@/lib/deltadash/track-catalog';
 import { getHumanCar, getRankedCars } from '@/lib/deltadash/selectors';
 import { loadStoredDeltaDashEvents, resetStoredDeltaDashEvents, saveStoredDeltaDashEvents } from '@/lib/deltadash/storage';
-import type { DeltaDashEvent, DeltaDashTyreCompound } from '@/lib/deltadash/types';
+import { getOfficialLoginUrl, getSharedSessionProfile, getSupabaseClient } from '@/lib/supabase';
+import type { DeltaDashEvent, DeltaDashPendingChoice, DeltaDashTyreCompound } from '@/lib/deltadash/types';
+
+const AUTOMATIC_FLOW_LINGER_MS = 750;
+
+type PrototypeAccessState = 'checking' | 'signed-out' | 'unlicensed' | 'allowed';
 
 export function DeltadashPrototypePage() {
   const { language } = useLanguage();
+  const [accessState, setAccessState] = useState<PrototypeAccessState>('checking');
   const [events, setEvents] = useState<DeltaDashEvent[]>([]);
   const [deploySlots, setDeploySlots] = useState<(DeltaDashCardPlayInput | null)[]>([null, null, null]);
   const [selectedTrackKey, setSelectedTrackKey] = useState(DEFAULT_REAL_TRACK_ID);
   const [selectedPlayerCount, setSelectedPlayerCount] = useState(4);
   const [startingLightsOn, setStartingLightsOn] = useState(0);
+  const [selectedChoiceCardIds, setSelectedChoiceCardIds] = useState<string[]>([]);
+  const autoFlowTimerRef = useRef<number | null>(null);
   const state = useMemo(() => projectDeltaDashEvents(events), [events]);
   const rankedCars = state ? getRankedCars(state) : [];
   const humanCar = state ? getHumanCar(state) : null;
   const recentEvents = events.slice(-10).reverse();
-  const latestStewardNote = state?.stewardNotes.at(-1) ?? null;
+  const latestStewardNote = state ? getLatestVisibleStewardNote(state) : null;
 
   useEffect(() => {
-    setEvents(loadStoredDeltaDashEvents());
+    let cancelled = false;
+
+    async function checkAccess() {
+      const supabase = getSupabaseClient();
+      const { user } = await getSharedSessionProfile();
+
+      if (cancelled) return;
+
+      if (!user) {
+        setAccessState('signed-out');
+        return;
+      }
+
+      if (!supabase) {
+        setAccessState('unlicensed');
+        return;
+      }
+
+      const { data, error } = await supabase
+        .from('dd_user_version_licenses')
+        .select('version_id')
+        .eq('user_id', user.id)
+        .limit(1);
+
+      if (!cancelled) {
+        setAccessState(!error && data && data.length > 0 ? 'allowed' : 'unlicensed');
+      }
+    }
+
+    void checkAccess();
+
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   useEffect(() => {
-    if (events.length) saveStoredDeltaDashEvents(events);
+    if (accessState === 'allowed') setEvents(loadStoredDeltaDashEvents());
+  }, [accessState]);
+
+  useEffect(() => {
+    if (accessState === 'allowed' && events.length) saveStoredDeltaDashEvents(events);
+  }, [accessState, events]);
+
+  useEffect(() => {
+    if (autoFlowTimerRef.current !== null) return;
+    const nextEvents = getNextAutomaticFlowEvents(events);
+    if (!nextEvents.length) return;
+
+    autoFlowTimerRef.current = window.setTimeout(() => {
+      autoFlowTimerRef.current = null;
+      setEvents((currentEvents) => {
+        const delayedEvents = getNextAutomaticFlowEvents(currentEvents);
+        return delayedEvents.length ? [...currentEvents, ...delayedEvents] : currentEvents;
+      });
+    }, AUTOMATIC_FLOW_LINGER_MS);
+
+    return () => {
+      if (autoFlowTimerRef.current !== null) {
+        window.clearTimeout(autoFlowTimerRef.current);
+        autoFlowTimerRef.current = null;
+      }
+    };
   }, [events]);
 
   useEffect(() => {
@@ -72,7 +138,7 @@ export function DeltadashPrototypePage() {
   }
 
   function queueCard(cardDefinitionId: string, cardInstanceId?: string) {
-    if (state?.racePhase !== 'live' || humanCar?.pitState.status === 'servicing') return;
+    if (state?.racePhase !== 'live' || state.turnStep !== 'planning' || humanCar?.pitState.status === 'servicing') return;
     setDeploySlots((current) => {
       const next = [...current];
       const emptyIndex = next.findIndex((slot) => !slot);
@@ -82,16 +148,50 @@ export function DeltadashPrototypePage() {
     });
   }
 
+  function discardCard(cardInstanceId: string) {
+    const nextEvents = discardHandCard(events, cardInstanceId);
+    if (!nextEvents.length) return;
+    setDeploySlots((current) => current.map((slot) => slot?.cardInstanceId === cardInstanceId ? null : slot));
+    appendFlowEvents(nextEvents);
+  }
+
   function updateDeploySlot(slotIndex: number, slot: DeltaDashCardPlayInput | null) {
     setDeploySlots((current) => current.map((currentSlot, index) => index === slotIndex ? slot : currentSlot));
   }
 
   function commitHumanCards() {
-    if (state?.racePhase !== 'live' || humanCar?.pitState.status === 'servicing') return;
-    const nextEvents = advanceLocalMatch(events, deploySlots.filter((slot): slot is DeltaDashCardPlayInput => Boolean(slot)));
+    if (state?.racePhase !== 'live' || humanCar?.pitState.status === 'servicing' || state.turnStep !== 'planning') return;
+    const nextEvents = confirmTurn(events, deploySlots.filter((slot): slot is DeltaDashCardPlayInput => Boolean(slot)));
+    if (!nextEvents.length) return;
+    appendFlowEvents(nextEvents);
+    setDeploySlots([null, null, null]);
+  }
+
+  function appendFlowEvents(nextEvents: DeltaDashEvent[]) {
     if (!nextEvents.length) return;
     setEvents((currentEvents) => [...currentEvents, ...nextEvents]);
-    setDeploySlots([null, null, null]);
+  }
+
+  function revealResolutionItem() {
+    appendFlowEvents(revealNextResolutionItem(events));
+  }
+
+  function resolveResolutionItem() {
+    const nextEvents = resolveCurrentResolutionItem(events);
+    if (nextEvents.length) {
+      appendFlowEvents(nextEvents);
+      return;
+    }
+    appendFlowEvents(finishResolution(events));
+  }
+
+  function submitPendingChoice(choice: DeltaDashPendingChoice) {
+    appendFlowEvents(choice.kind === 'handLimitDiscard' ? submitHandLimitDiscardChoice(events, choice.selectedCardInstanceIds ?? []) : submitResolutionChoice(events, choice));
+    setSelectedChoiceCardIds([]);
+  }
+
+  function continueCleanupPhase() {
+    appendFlowEvents(continueCleanup(events));
   }
 
   function removeHumanDeployedCard(cardInstanceId: string) {
@@ -142,8 +242,72 @@ export function DeltadashPrototypePage() {
     if (!humanCar) return;
     const nextEvents = exitPitLaneAndAdvance(events, humanCar.id);
     if (!nextEvents.length) return;
-    setEvents((currentEvents) => [...currentEvents, ...nextEvents]);
+    appendFlowEvents(nextEvents);
     setDeploySlots([null, null, null]);
+  }
+
+  function toggleChoiceCard(cardInstanceId: string) {
+    setSelectedChoiceCardIds((current) => current.includes(cardInstanceId) ? current.filter((id) => id !== cardInstanceId) : [...current, cardInstanceId]);
+  }
+
+  if (accessState !== 'allowed') {
+    const isChecking = accessState === 'checking';
+    const isSignedOut = accessState === 'signed-out';
+    const loginUrl = getOfficialLoginUrl('/play');
+
+    return (
+      <div className="space-y-8">
+        <LocalizedSectionHeader
+          copy={{
+            zh: {
+              eyebrow: '网页试玩',
+              title: 'Delta Dash 网页原型',
+              description: '网页试玩需要先登录，并至少拥有 1 个正式版本许可。',
+            },
+            en: {
+              eyebrow: 'Web Prototype',
+              title: 'Delta Dash web prototype',
+              description: 'The web prototype requires an account with at least one official version license.',
+            },
+          }}
+        />
+
+        <section className="rounded-3xl border border-cyan-300/20 bg-cyan-500/10 p-6 text-sm leading-6 text-cyan-50">
+          <h2 className="text-xl font-semibold text-white">
+            {isChecking
+              ? language === 'en' ? 'Checking access…' : '正在检查访问权限…'
+              : isSignedOut
+                ? language === 'en' ? 'Sign in to continue' : '请先登录'
+                : language === 'en' ? 'Version license required' : '需要版本许可'}
+          </h2>
+          <p className="mt-3 text-slate-300">
+            {isChecking
+              ? language === 'en'
+                ? 'Confirming your account and version license before loading the game.'
+                : '正在确认你的账号和版本许可，然后加载游戏。'
+              : isSignedOut
+                ? language === 'en'
+                  ? 'Use your Geeks Production Studio account, then return here to launch the web prototype.'
+                  : '请使用 Geeks Production Studio 账号登录，然后返回这里启动网页原型。'
+                : language === 'en'
+                  ? 'Buy or redeem any official Delta Dash version on the downloads page first. Once your account owns at least one version license, this prototype will unlock.'
+                  : '请先在下载页购买或兑换任意一个 Delta Dash 正式版本。账号拥有至少 1 个版本许可后，此网页原型会解锁。'}
+          </p>
+          {!isChecking ? (
+            <div className="mt-5 flex flex-wrap gap-3">
+              {isSignedOut ? (
+                <a href={loginUrl} className="rounded-full border border-[var(--accent-hot)]/35 bg-[rgba(85,199,255,0.08)] px-5 py-3 text-sm font-medium text-[var(--text-main)] transition hover:bg-[rgba(255,77,90,0.16)]">
+                  {language === 'en' ? 'Sign in' : '登录'}
+                </a>
+              ) : null}
+              <a href="/download" className="rounded-full border border-cyan-300/30 px-5 py-3 text-sm font-medium text-cyan-50 transition hover:border-cyan-200 hover:bg-cyan-300/10">
+                {language === 'en' ? 'Go to downloads' : '前往下载页'}
+              </a>
+            </div>
+          ) : null}
+        </section>
+      </div>
+    );
   }
 
   return (
@@ -225,15 +389,22 @@ export function DeltadashPrototypePage() {
         <>
           <PlayCockpitLayout
             language={language}
-            cardRail={<CardRailPanel state={state} humanCar={humanCar} language={language} queuedCardInstanceIds={deploySlots.flatMap((slot) => slot?.cardInstanceId ? [slot.cardInstanceId] : [])} onQueueCard={queueCard} />}
+            cardRail={<CardRailPanel state={state} humanCar={humanCar} language={language} queuedCardInstanceIds={deploySlots.flatMap((slot) => slot?.cardInstanceId ? [slot.cardInstanceId] : [])} onQueueCard={queueCard} onDiscardCard={discardCard} />}
             standings={<StandingsPanel state={state} rankedCars={rankedCars} language={language} onReset={resetMatch} onTrackChange={handleTrackChange} />}
             timeline={<TrackTimelinePanel state={state} language={language} />}
+            raceFlow={<RaceFlowPanel state={state} language={language} />}
             raceControl={<RaceControlPanel latestNote={latestStewardNote} events={recentEvents} language={language} />}
-            driverConsole={<DriverConsolePanel state={state} humanCar={humanCar} language={language} deploySlots={deploySlots} onUpdateDeploySlot={updateDeploySlot} onConfirmDeploy={commitHumanCards} onRemoveDeployedCard={removeHumanDeployedCard} onSelectTyre={selectHumanTyre} onStartRace={startRace} startingLightsOn={startingLightsOn} onEnterPit={enterHumanPit} onUpdatePitService={updateHumanPitService} onExitPit={exitHumanPit} />}
+            driverConsole={<DriverConsolePanel state={state} humanCar={humanCar} language={language} deploySlots={deploySlots} onUpdateDeploySlot={updateDeploySlot} onConfirmDeploy={commitHumanCards} onRemoveDeployedCard={removeHumanDeployedCard} onSelectTyre={selectHumanTyre} onStartRace={startRace} startingLightsOn={startingLightsOn} onEnterPit={enterHumanPit} onUpdatePitService={updateHumanPitService} onExitPit={exitHumanPit} onRevealNext={revealResolutionItem} onResolveCurrent={resolveResolutionItem} onContinueCleanup={continueCleanupPhase} onSubmitChoice={submitPendingChoice} selectedChoiceCardIds={selectedChoiceCardIds} onToggleChoiceCard={toggleChoiceCard} />}
           />
           <AssetGallery language={language} />
         </>
       )}
     </div>
   );
+}
+
+function getLatestVisibleStewardNote(state: NonNullable<ReturnType<typeof projectDeltaDashEvents>>) {
+  return [...state.stewardNotes]
+    .reverse()
+    .find((note) => note.severity !== 'penalty' || note.round === state.round) ?? null;
 }

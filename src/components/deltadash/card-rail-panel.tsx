@@ -11,16 +11,19 @@ export function CardRailPanel({
   language,
   queuedCardInstanceIds,
   onQueueCard,
+  onDiscardCard,
 }: {
   state: DeltaDashMatchState;
   humanCar: DeltaDashCar | null;
   language: Language;
   queuedCardInstanceIds: string[];
   onQueueCard: (cardDefinitionId: string, cardInstanceId?: string) => void;
+  onDiscardCard: (cardInstanceId: string) => void;
 }) {
   const cards = humanCar ? getCardsForCar(state, humanCar.id) : [];
   const pileCounts = humanCar ? getCardPileCounts(state, humanCar.id) : null;
   const playableCards = cards.filter((card) => card.definition.implementationStatus !== 'documented-only');
+  const handWarning = pileCounts && humanCar ? getHandWarning(pileCounts.hand, humanCar.focus) : undefined;
   const deploySlotsFull = queuedCardInstanceIds.length >= 3;
   const controlsLocked = state.racePhase !== 'live' || humanCar?.pitState.status === 'servicing';
 
@@ -52,7 +55,7 @@ export function CardRailPanel({
             {pileCounts ? (
               <div className="mb-3 grid grid-cols-3 gap-2 text-center text-[0.65rem] font-black uppercase tracking-[0.16em]">
                 <PileCount label={language === 'en' ? 'Deck' : '牌库'} value={pileCounts.deck} />
-                <PileCount label={language === 'en' ? 'Hand' : '手牌'} value={pileCounts.hand} />
+                <PileCount label={language === 'en' ? 'Hand' : '手牌'} value={pileCounts.hand} warning={handWarning} />
                 <PileCount label={language === 'en' ? 'Discard' : '弃牌'} value={pileCounts.discard} />
               </div>
             ) : null}
@@ -65,6 +68,7 @@ export function CardRailPanel({
                   sourceCar={humanCar}
                   validTargets={humanCar ? getValidTargetCars(state, humanCar, card.definition) : []}
                   onPlay={deploySlotsFull ? () => undefined : (cardDefinitionId) => onQueueCard(cardDefinitionId, card.instance?.instanceId)}
+                  onDiscard={card.instance ? onDiscardCard : undefined}
                   mode="queue"
                   selected={card.instance ? queuedCardInstanceIds.includes(card.instance.instanceId) : false}
                 />
@@ -78,11 +82,25 @@ export function CardRailPanel({
   );
 }
 
-function PileCount({ label, value }: { label: string; value: number }) {
+type HandWarning = 'yellow' | 'red';
+
+function PileCount({ label, value, warning }: { label: string; value: number; warning?: HandWarning }) {
+  const warningClass = warning === 'red'
+    ? 'border-red-300/45 bg-red-500/20 text-red-100'
+    : warning === 'yellow'
+      ? 'border-yellow-300/45 bg-yellow-400/20 text-yellow-100'
+      : 'border-lime-300/20 bg-lime-300/10 text-lime-100';
+
   return (
-    <div className="rounded-2xl border border-lime-300/20 bg-lime-300/10 px-2 py-2 text-lime-100">
+    <div className={`rounded-2xl border px-2 py-2 ${warningClass}`}>
       <p className="opacity-70">{label}</p>
       <p className="mt-1 text-base text-white">{value}</p>
     </div>
   );
+}
+
+function getHandWarning(handCount: number, focus: number): HandWarning | undefined {
+  if (handCount >= focus) return 'red';
+  if (handCount === focus - 1) return 'yellow';
+  return undefined;
 }

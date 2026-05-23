@@ -38,6 +38,8 @@ function describeEvent(event: DeltaDashEvent) {
       return `CARD_RESOLVED · ${event.carId} resolved ${event.cardDefinitionId}`;
     case 'CARDS_DRAWN':
       return `CARDS_DRAWN · ${event.carId} drew ${event.cardInstanceIds.length} card(s)`;
+    case 'HAND_OVERLOAD_PENALTY':
+      return `HAND_OVERLOAD_PENALTY · ${event.carId} -${event.timeLoss.toFixed(1)}s`;
     case 'ACTIONS_RESOLVED':
       return `ACTIONS_RESOLVED · ${event.results.length} cars updated`;
     case 'STEWARD_REVIEWED':
@@ -58,6 +60,28 @@ function describeEvent(event: DeltaDashEvent) {
       return `MATCH_FINISHED · round ${event.round}`;
     case 'COMMITMENTS_LOCKED':
       return `COMMITMENTS_LOCKED · round ${event.round}, response ${event.responseWindowSeconds}s`;
+    case 'RESOLUTION_QUEUE_PREPARED':
+      return `RESOLUTION_QUEUE_PREPARED · ${event.items.length} item(s)`;
+    case 'RESOLUTION_ITEM_REVEALED':
+      return `RESOLUTION_ITEM_REVEALED · ${event.itemId}`;
+    case 'RESOLUTION_CHOICE_REQUESTED':
+      return `RESOLUTION_CHOICE_REQUESTED · ${event.choice.kind}`;
+    case 'RESOLUTION_CHOICE_SUBMITTED':
+      return `RESOLUTION_CHOICE_SUBMITTED · ${event.choice.kind}`;
+    case 'RESOLUTION_ITEM_RESOLVED':
+      return `RESOLUTION_ITEM_RESOLVED · ${event.itemId}`;
+    case 'RESOLUTION_QUEUE_COMPLETED':
+      return `RESOLUTION_QUEUE_COMPLETED · round ${event.round}`;
+    case 'CLEANUP_STARTED':
+      return `CLEANUP_STARTED · round ${event.round}`;
+    case 'HAND_LIMIT_DISCARD_REQUESTED':
+      return `HAND_LIMIT_DISCARD_REQUESTED · ${event.choice.requiredCount} card(s)`;
+    case 'HAND_LIMIT_DISCARD_SUBMITTED':
+      return `HAND_LIMIT_DISCARD_SUBMITTED · ${event.choice.selectedCardInstanceIds?.length ?? 0} card(s)`;
+    case 'FOCUS_REFRESHED':
+      return `FOCUS_REFRESHED · ${event.carId} ${event.focusDelta >= 0 ? '+' : ''}${event.focusDelta}`;
+    case 'CLEANUP_COMPLETED':
+      return `CLEANUP_COMPLETED · round ${event.round}`;
     default: {
       const exhaustive: never = event;
       return exhaustive;

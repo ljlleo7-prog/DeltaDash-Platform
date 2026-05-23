@@ -1,9 +1,30 @@
 import type { Language } from '@/lib/i18n';
 import { localize } from '@/lib/i18n';
+import type { DeltaDashCardDefinition } from '@/lib/deltadash/card-types';
 import type { DeltaDashPlayableCard } from '@/lib/deltadash/card-selectors';
 import type { DeltaDashCar } from '@/lib/deltadash/types';
 import { getTimeGap } from '@/lib/deltadash/targeting';
 import { getCardCategoryAccentTextClass, getCardCategoryBadgeClass, getCardCategoryFrameClass, getCardCategoryLabel, getCardCategoryMutedTextClass, getCardCategoryTextClass, getCardPriorityClass } from './card-visual-style';
+
+export function CardFace({
+  definition,
+  language,
+  disabledReason,
+  selected = false,
+  compact = false,
+}: {
+  definition: DeltaDashCardDefinition;
+  language: Language;
+  disabledReason?: string | null;
+  selected?: boolean;
+  compact?: boolean;
+}) {
+  return (
+    <div className={`rounded-2xl border transition ${compact ? 'p-3' : 'p-4'} ${getCardCategoryFrameClass(definition.category, selected)} ${selected ? 'ring-1 ring-yellow-200/45' : ''}`}>
+      <CardBody definition={definition} language={language} disabledReason={disabledReason} compact={compact} />
+    </div>
+  );
+}
 
 export function CardPlayCard({
   card,
@@ -15,6 +36,7 @@ export function CardPlayCard({
   selected = false,
   selectedTargetCarIds = [],
   onSelectTarget,
+  onDiscard,
 }: {
   card: DeltaDashPlayableCard;
   language: Language;
@@ -25,6 +47,7 @@ export function CardPlayCard({
   selected?: boolean;
   selectedTargetCarIds?: string[];
   onSelectTarget?: (targetCarId: string) => void;
+  onDiscard?: (cardInstanceId: string) => void;
 }) {
   const needsTarget = card.definition.targeting.kind === 'opponent';
   const disabled = !card.playable || (needsTarget && !validTargets.length);
@@ -33,15 +56,26 @@ export function CardPlayCard({
 
   if (mode === 'queue') {
     return (
-      <button type="button" disabled={disabled} onClick={() => onPlay(card.definition.id)} className={`block w-full text-left ${outerClass} enabled:hover:-translate-y-0.5`}>
-        <CardBody card={card} language={language} />
-      </button>
+      <div className="relative">
+        <button type="button" disabled={disabled} onClick={() => onPlay(card.definition.id)} className={`block w-full text-left ${outerClass} enabled:hover:-translate-y-0.5`}>
+          <CardBody definition={card.definition} language={language} disabledReason={card.disabledReason} />
+        </button>
+        {card.instance && onDiscard ? (
+          <button
+            type="button"
+            onClick={() => onDiscard(card.instance!.instanceId)}
+            className="absolute right-3 top-3 rounded-full border border-red-300/35 bg-red-500/20 px-2.5 py-1 text-[0.62rem] font-black uppercase tracking-[0.14em] text-red-100 transition hover:bg-red-300 hover:text-slate-950"
+          >
+            {language === 'en' ? 'Discard' : '弃牌'}
+          </button>
+        ) : null}
+      </div>
     );
   }
 
   return (
     <div className={outerClass}>
-      <CardBody card={card} language={language} />
+      <CardBody definition={card.definition} language={language} disabledReason={card.disabledReason} />
       {needsTarget ? (
         <div className="mt-3 flex flex-wrap gap-2">
           {validTargets.length ? validTargets.map((target) => {
@@ -75,28 +109,28 @@ export function CardPlayCard({
   );
 }
 
-function CardBody({ card, language }: { card: DeltaDashPlayableCard; language: Language }) {
+function CardBody({ definition, language, disabledReason, compact = false }: { definition: DeltaDashCardDefinition; language: Language; disabledReason?: string | null; compact?: boolean }) {
   return (
     <>
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
-          <p className={`text-sm font-black ${getCardCategoryTextClass(card.definition.category)}`}>{localize(card.definition.name, language)}</p>
+          <p className={`${compact ? 'text-xs' : 'text-sm'} font-black ${getCardCategoryTextClass(definition.category)}`}>{localize(definition.name, language)}</p>
           <div className="mt-2 flex flex-wrap gap-2 text-[0.62rem] font-black uppercase tracking-[0.16em]">
-            <span className={`rounded-full border px-2.5 py-1 ${getCardCategoryBadgeClass(card.definition.category)}`}>{getCardCategoryLabel(card.definition.category, language)}</span>
-            <span className={`rounded-full border px-2.5 py-1 ${getCardPriorityClass(card.definition.priority)}`}>P{card.definition.priority}</span>
+            <span className={`rounded-full border px-2.5 py-1 ${getCardCategoryBadgeClass(definition.category)}`}>{getCardCategoryLabel(definition.category, language)}</span>
+            <span className={`rounded-full border px-2.5 py-1 ${getCardPriorityClass(definition.priority)}`}>P{definition.priority}</span>
           </div>
         </div>
-        <span className={`rounded-full border px-2.5 py-1 text-[0.65rem] font-medium ${statusClass(card.definition.implementationStatus)}`}>
-          {card.definition.implementationStatus}
+        <span className={`rounded-full border px-2.5 py-1 text-[0.65rem] font-medium ${statusClass(definition.implementationStatus)}`}>
+          {definition.implementationStatus}
         </span>
       </div>
-      <p className={`mt-3 text-xs leading-5 ${getCardCategoryMutedTextClass(card.definition.category)}`}>{localize(card.definition.summary, language)}</p>
-      {card.definition.targeting.range ? (
-        <p className={`mt-2 text-[0.65rem] uppercase tracking-[0.18em] ${getCardCategoryAccentTextClass(card.definition.category)}`}>
-          {language === 'en' ? 'Window' : '窗口'} ≤ {card.definition.targeting.range.maxTimeGap ?? '∞'}s
+      <p className={`mt-3 text-xs ${compact ? 'line-clamp-3' : ''} leading-5 ${getCardCategoryMutedTextClass(definition.category)}`}>{localize(definition.summary, language)}</p>
+      {definition.targeting.range ? (
+        <p className={`mt-2 text-[0.65rem] uppercase tracking-[0.18em] ${getCardCategoryAccentTextClass(definition.category)}`}>
+          {language === 'en' ? 'Window' : '窗口'} ≤ {definition.targeting.range.maxTimeGap ?? '∞'}s
         </p>
       ) : null}
-      {card.disabledReason ? <p className="mt-3 text-[0.65rem] uppercase tracking-[0.18em] text-slate-500">{card.disabledReason}</p> : null}
+      {disabledReason ? <p className="mt-3 text-[0.65rem] uppercase tracking-[0.18em] text-slate-500">{disabledReason}</p> : null}
     </>
   );
 }

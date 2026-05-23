@@ -20,7 +20,7 @@ export const playableCardCatalog: DeltaDashCardDefinition[] = [
     effects: [
       { type: 'modify_time_delta', amount: 1.5, yellowAmount: 1 },
       { type: 'modify_energy', amount: 1, min: 0, max: 6 },
-      { type: 'modify_tire', amount: -17, min: 0 },
+      { type: 'modify_tire', amount: -6, min: 0 },
     ],
     onFailedConditions: 'no-effect',
     implementationStatus: 'implemented',
@@ -43,7 +43,7 @@ export const playableCardCatalog: DeltaDashCardDefinition[] = [
     effects: [
       { type: 'modify_time_delta', amount: 2.5 },
       { type: 'modify_energy', amount: -2, min: 0 },
-      { type: 'modify_tire', amount: -34, min: 0 },
+      { type: 'modify_tire', amount: -9, min: 0 },
     ],
     onFailedConditions: 'no-effect',
     implementationStatus: 'implemented',
@@ -85,7 +85,7 @@ export const playableCardCatalog: DeltaDashCardDefinition[] = [
     effects: [
       { type: 'modify_time_delta', amount: 0.5 },
       { type: 'modify_energy', amount: 2, min: 0, max: 6 },
-      { type: 'modify_tire', amount: 17, min: 0, max: 100 },
+      { type: 'modify_tire', amount: 3, min: 0, max: 100 },
     ],
     onFailedConditions: 'no-effect',
     implementationStatus: 'implemented',
@@ -410,7 +410,7 @@ export function getCardDefinitionById(id: string): DeltaDashCardDefinition | nul
 }
 
 export function getImplementedCards(): DeltaDashCardDefinition[] {
-  return playableCardCatalog.filter((card) => card.implementationStatus === 'implemented');
+  return playableCardCatalog.filter((card) => card.implementationStatus === 'implemented' && card.category !== 'prototype');
 }
 
 export function getRuntimePlayableCards(): DeltaDashCardDefinition[] {

@@ -89,6 +89,32 @@ export default function HomePage() {
         </section>
       )}
 
+      <section className="rounded-3xl border border-[var(--accent-cold)]/30 bg-[linear-gradient(135deg,rgba(85,199,255,0.12),rgba(255,77,90,0.08))] p-6">
+        <div className="flex flex-col gap-5 md:flex-row md:items-center md:justify-between">
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-[0.35em] text-[var(--accent-cold)]">
+              {language === 'en' ? 'Community flow' : '社区互动'}
+            </p>
+            <h3 className="mt-3 text-2xl font-semibold text-white">
+              {language === 'en' ? 'Share playtest feedback while the race is fresh' : '趁比赛体验还新鲜时分享试玩反馈'}
+            </h3>
+            <p className="mt-3 max-w-2xl text-sm leading-6 text-[var(--text-dim)]">
+              {language === 'en'
+                ? 'Use the community page for balance notes, bug reports, strategy questions, and mod discussion tied to current Delta Dash builds.'
+                : '在社区页面集中提交平衡反馈、问题汇报、策略问题与围绕当前 Delta Dash 版本的模组讨论。'}
+            </p>
+          </div>
+          <div className="flex flex-wrap gap-3">
+            <Link to="/community" className="rounded-full border border-[var(--accent-hot)]/35 bg-[rgba(85,199,255,0.08)] px-5 py-3 text-sm font-medium text-[var(--text-main)] transition hover:bg-[rgba(255,77,90,0.16)]">
+              {language === 'en' ? 'Open community' : '进入社区'}
+            </Link>
+            <a href="https://geeksproductionstudio.com" target="_blank" rel="noreferrer" className="rounded-full border border-white/10 bg-black/20 px-5 py-3 text-sm font-medium text-slate-200 transition hover:border-[var(--accent-cold)]/40 hover:text-white">
+              {language === 'en' ? 'Official website' : '官方网站'}
+            </a>
+          </div>
+        </div>
+      </section>
+
       <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
         {featureCards[language].map((card) => (
           <article key={card.title} className="rounded-3xl border border-white/10 bg-white/5 p-5">

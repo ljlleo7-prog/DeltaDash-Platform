@@ -264,8 +264,21 @@ export function CommunityClientPage() {
                 : '使用论坛集中整理反馈、问题汇报、策略讨论与模组交流。'}
             </p>
           </div>
-          <div className="rounded-2xl border border-white/10 bg-black/20 px-4 py-3 text-sm text-slate-200">
-            {threads.length} {language === 'en' ? 'threads' : '个讨论串'}
+          <div className="space-y-3 rounded-2xl border border-white/10 bg-black/20 px-4 py-3 text-sm text-slate-200 lg:min-w-60">
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-[0.22em] text-[var(--accent-cold)]">{language === 'en' ? 'Official channels' : '官方渠道'}</p>
+              <p className="mt-2 text-sm text-slate-300">
+                {language === 'en' ? `${threads.length} threads collecting public feedback.` : `${threads.length} 个讨论串正在收集公开反馈。`}
+              </p>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              <a href="https://geeksproductionstudio.com" target="_blank" rel="noreferrer" className="rounded-full border border-[var(--accent-cold)]/30 bg-cyan-500/10 px-3 py-1.5 text-xs font-semibold text-cyan-100 transition hover:border-cyan-200/60">
+                {language === 'en' ? 'Official website' : '官方网站'}
+              </a>
+              <Link to="/community" className="rounded-full border border-[var(--accent-hot)]/30 bg-[rgba(255,77,90,0.12)] px-3 py-1.5 text-xs font-semibold text-[var(--text-main)] transition hover:border-[var(--accent-hot)]/60">
+                {language === 'en' ? 'Feedback hub' : '反馈中心'}
+              </Link>
+            </div>
           </div>
         </div>
       </section>
